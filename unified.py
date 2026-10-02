@@ -17,9 +17,9 @@ class SodaGallerySource:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {}, "hidden": {"selection_data": ("STRING", {"default": "{}", "forceInput": True})}}
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("images", "prompts")
-    OUTPUT_IS_LIST = (True, True)
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("images", "prompts", "source_record")
+    OUTPUT_IS_LIST = (True, True, True)
     OUTPUT_NODE = False
     FUNCTION = "run"
     CATEGORY = "Soda/Workbench"
@@ -33,7 +33,17 @@ class SodaGallerySource:
         cls = nodes.NODE_CLASS_MAPPINGS.get("DanbooruGalleryNode")
         if cls is None:
             raise ValueError("作者画廊插件未加载。")
-        return cls().get_selected_data(selection_data=selection_data)
+        images, prompts = cls().get_selected_data(selection_data=selection_data)
+        from .tag_tools import gallery_record
+        selections = core.parse_json(selection_data).get("selections", [])
+        records = []
+        # Native gallery skips failed images. Refuse to attach another picture's provenance.
+        aligned = len(selections) == len(prompts)
+        for index, prompt in enumerate(prompts):
+            selection = selections[index] if aligned else {}
+            value = gallery_record(selection.get("source_site", "danbooru"), str(selection.get("post_id", "")), prompt)
+            records.append(suite.dump(value))
+        return images, prompts, records
 
 
 class SodaUnifiedSource:
@@ -48,6 +58,7 @@ class SodaUnifiedSource:
         }, "optional": {
             "gallery_image": ("IMAGE", {"lazy": True}),
             "gallery_text": ("STRING", {"forceInput": True, "lazy": True}),
+            "gallery_record": ("STRING", {"forceInput": True, "lazy": True}),
         }}
     RETURN_TYPES = ("IMAGE", "STRING", "STRING", "STRING")
     RETURN_NAMES = ("image", "original_prompt", "source_record", "negative_prompt")
@@ -58,18 +69,24 @@ class SodaUnifiedSource:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    def check_lazy_status(self, source, gallery_image=None, gallery_text=None, **kwargs):
+    def check_lazy_status(self, source, gallery_image=None, gallery_text=None, gallery_record="", **kwargs):
         if source != GALLERY:
             return []
-        return [name for name, value in (("gallery_image", gallery_image), ("gallery_text", gallery_text)) if value is None]
+        missing = [name for name, value in (("gallery_image", gallery_image), ("gallery_text", gallery_text)) if value is None]
+        if gallery_record is None:
+            missing.append("gallery_record")
+        return missing
 
-    async def run(self, source, image_path, text, port, card_key, gallery_image=None, gallery_text=None):
+    async def run(self, source, image_path, text, port, card_key, gallery_image=None, gallery_text=None, gallery_record=None):
         if source == DFLOW:
             return await SodaDFlowSource().run(port, card_key)
         if source == TEXT:
             return (None, text, suite.dump({"source": TEXT}), "")
         if source == GALLERY:
-            return (gallery_image, gallery_text or "", suite.dump({"source": GALLERY}), "")
+            from .tag_tools import split_tags
+            value = core.parse_json(gallery_record) if gallery_record else {"source": GALLERY,
+                "gallery": {"selected_tags": split_tags(gallery_text or ""), "raw_tags": split_tags(gallery_text or ""), "complete": False}}
+            return (gallery_image, gallery_text or "", suite.dump(value), "")
         if source != LOCAL:
             raise ValueError("未知素材入口。")
         if not image_path.strip():

@@ -232,6 +232,12 @@ class SodaPromptOutput:
                 target_adapter.messages(target, prompt, source if matches and not use_edited else {}, anima_token_budget),
                 refresh, timeout_seconds, 4000)
             prompt, validation, tags = target_adapter.validate(target, response, anima_token_budget)
+            if matches and not use_edited and tags:
+                from .tag_tools import tag_intent, canonical
+                excluded = set(tag_intent(source).get("excluded_tags", []))
+                returned = excluded.intersection(canonical(tag) for tag in tags)
+                if returned:
+                    raise ValueError("目标适配补回了已舍弃的标签，未作为最终稿输出：" + ", ".join(sorted(returned)))
             adapted = True
         elif already_adapted:
             adapted = True

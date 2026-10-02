@@ -65,3 +65,6 @@ python tests/run_tests.py
 前端预览、快捷按钮与服务配置回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs tests/test_target_frontend.mjs tests/test_services_frontend.mjs`，不需要安装 npm 依赖。
 
 离线测试不读取真实密钥、不调用付费API、不下载模型。自动测试配置在 `.github/workflow-templates/offline-tests.yml`，使用 CPU PyTorch；当前发布凭据缺少 workflow 权限，模板尚未启用。具有相应权限后将它复制到 `.github/workflows/tests.yml` 可启用。验证边界见 [VERIFICATION.md](VERIFICATION.md)。自建代码采用 MIT，第三方资产见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [SOURCES.md](SOURCES.md)。
+# 标签整理
+
+新工作台在②与③之间增加分类标签按钮，可取舍画师、角色、作品、服装等类别、保存未知标签映射，并可使用已下载的BGE-M3资源进行本地中文标签搜索。[使用方法与资源目录](TAG-TOOLS.md)。

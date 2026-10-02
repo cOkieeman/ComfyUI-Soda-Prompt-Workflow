@@ -1,0 +1,5 @@
+# Optional, local semantic tag search. No remote model download is performed.
+pyarrow>=18
+transformers>=4.45
+safetensors>=0.4
+torch>=2.2

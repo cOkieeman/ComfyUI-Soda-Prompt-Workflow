@@ -53,8 +53,9 @@ class SodaPromptStages:
         matches = source.get("selected_prompt", source.get("faithful_prompt")) == source_prompt
         if not replace_oc and matches and tags:
             tag_text = ", ".join(tags)
-            if source_prompt.startswith(tag_text):
-                natural = source_prompt[len(tag_text):].lstrip(", \r\n")
+            parts = source.get("prompt_parts", {})
+            if parts.get("text") == source_prompt or source_prompt.startswith(tag_text):
+                natural = parts.get("nl", "") if parts.get("text") == source_prompt else source_prompt[len(tag_text):].lstrip(", \r\n")
                 result["tags"] = tags
                 result["prompt_parts"] = {"text": prompt, "tags": tag_text,
                     "nl": ", ".join(x.strip() for x in (prefix, natural, suffix) if x.strip())}
