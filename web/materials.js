@@ -8,6 +8,84 @@ function element(tag, text, parent) {
     return el;
 }
 
+function addMaterialPreview(node) {
+    const container = element("div");
+    container.dataset.sodaMaterialPreview = "true";
+    container.style.cssText = "width:100%;box-sizing:border-box;padding:8px;background:#202126;border-radius:6px;color:#eee;overflow:hidden";
+    const image = element("img", "", container);
+    image.style.cssText = "width:100%;height:180px;object-fit:contain;background:#17181d";
+    const status = element("div", "", container);
+    status.style.cssText = "font-size:12px;line-height:18px;overflow-wrap:anywhere;padding-top:5px";
+    let height = 0, revision = 0;
+    const widget = node.addDOMWidget("soda_material_preview", "div", container, {serialize: false});
+    widget.computeSize = width => [width, height];
+    const resize = () => {
+        node.setSize([node.size[0], Math.max(node.size[1], node.computeSize()[1])]);
+        node.setDirtyCanvas(true, true);
+    };
+    node.sodaRefreshMaterialPreview = async card => {
+        const current = ++revision;
+        const source = node.widgets.find(w => w.name === "source");
+        const key = node.widgets.find(w => w.name === "card_key")?.value;
+        const port = Number(node.widgets.find(w => w.name === "port")?.value);
+        container.hidden = !!source && source.value !== "DFlow 素材";
+        image.hidden = true;
+        image.removeAttribute("src");
+        height = container.hidden ? 0 : 44;
+        status.textContent = key ? "正在读取所选 DFlow 素材…" : "尚未选择 DFlow 素材。";
+        resize();
+        if (container.hidden || !key) return;
+        try {
+            if (!card || card.key !== key) {
+                const response = await api.fetchApi(`/soda/materials/dflow?port=${port}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || "读取素材失败");
+                card = data.cards.find(item => item.key === key);
+            }
+            if (current !== revision) return;
+            if (!card) throw new Error("所选素材已不存在，请重新选择。");
+            status.textContent = `${card.name} · ${card.prompt ? "有原提示词" : "暂无原提示词；请在②选择‘重新反推’"}`;
+            if (card.image_path) {
+                image.alt = card.name;
+                image.hidden = false;
+                height = 230;
+                image.onerror = () => {
+                    if (current !== revision) return;
+                    image.hidden = true;
+                    height = 62;
+                    status.textContent = "图片读取失败，请确认 DFlow 正在运行并重新选择素材。";
+                    resize();
+                };
+                image.src = api.apiURL(`/soda/materials/dflow/image?port=${port}&key=${encodeURIComponent(key)}`);
+            } else {
+                height = 62;
+                status.textContent += " · 没有图片或高清缓存未就绪。";
+            }
+        } catch (error) {
+            if (current !== revision) return;
+            height = 62;
+            status.textContent = error.message;
+        }
+        resize();
+    };
+    const removed = node.onRemoved;
+    node.onRemoved = function (...args) {
+        revision++;
+        return removed?.apply(this, args);
+    };
+    for (const name of ["source", "port", "card_key"]) {
+        const input = node.widgets.find(w => w.name === name);
+        if (!input) continue;
+        const callback = input.callback;
+        input.callback = function (...args) {
+            const result = callback?.apply(this, args);
+            node.sodaRefreshMaterialPreview();
+            return result;
+        };
+    }
+    node.sodaRefreshMaterialPreview();
+}
+
 async function chooseMaterial(node) {
     const port = node.widgets.find(w => w.name === "port").value;
     const dialog = element("dialog");
@@ -64,6 +142,7 @@ async function chooseMaterial(node) {
                 const source = node.widgets.find(w => w.name === "source");
                 if (source) source.value = "DFlow 素材";
                 node.title = `素材入口 · ${card.name.slice(0, 40)}`;
+                node.sodaRefreshMaterialPreview?.(card);
                 node.setDirtyCanvas(true, true);
                 dialog.close();
             };
@@ -101,6 +180,12 @@ app.registerExtension({
             return;
         }
         if (!["SodaDFlowSource", "SodaUnifiedSource"].includes(nodeData.name)) return;
+        const configure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function (...args) {
+            const result = configure?.apply(this, args);
+            this.sodaRefreshMaterialPreview?.();
+            return result;
+        };
         const original = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function (...args) {
             const result = original?.apply(this, args);
@@ -142,6 +227,7 @@ app.registerExtension({
                 const port = this.widgets.find(w => w.name === "port").value;
                 window.open(`http://127.0.0.1:${Number(port)}`, "_blank", "noopener");
             });
+            addMaterialPreview(this);
             return result;
         };
     },

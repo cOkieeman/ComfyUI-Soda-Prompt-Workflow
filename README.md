@@ -20,7 +20,7 @@ Windows portable 用户把 python 换成 python_embeded/python.exe 的实际路�
 
 ## 使用
 
-1. **① 素材入口**：本地图片、作者画廊、DFlow 或文字。普通 JPG/PNG 可反推；没有元数据时返回空原词。
+1. **① 素材入口**：本地图片、作者画廊、DFlow 或文字。选择 DFlow 卡片后，入口立即显示所选图片预览和原词状态，重新打开工作流也会恢复预览；无需运行或调用反推接口。普通 JPG/PNG 可反推；没有元数据时返回空原词。
 2. **② 处理方式**：原提示词、重新反推或文字创作。没有原词需手动选反推，不会自动调用付费接口。创作用 variant_index 选稿。
 3. **③ 前后缀 / OC**：本地拼接前后缀；OC 替换需开关和设定。前后缀保留已识别标签的结构记录，OC 改写后不复用可能过时的标签。
 4. **④ 扩写选择**：关闭、TIPO、K2 七层英文或 DFlow 中文。默认关闭，一次只执行选中的路线。
@@ -57,5 +57,7 @@ TIPO 使用一次性独立进程，超时或取消时终止，结束后释放进
 ```sh
 python tests/run_tests.py
 ```
+
+前端预览回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs`，不需要安装 npm 依赖。
 
 离线测试不读取真实密钥、不调用付费API、不下载模型。自动测试配置在 `.github/workflow-templates/offline-tests.yml`，使用 CPU PyTorch；当前发布凭据缺少 workflow 权限，模板尚未启用。具有相应权限后将它复制到 `.github/workflows/tests.yml` 可启用。验证边界见 [VERIFICATION.md](VERIFICATION.md)。自建代码采用 MIT，第三方资产见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [SOURCES.md](SOURCES.md)。
