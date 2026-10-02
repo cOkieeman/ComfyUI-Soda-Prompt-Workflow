@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-function setup() {
+function setup(shiftedRestore = false) {
     class Element {
         constructor() { this.style = {}; this.dataset = {}; this.children = []; this.attributes = {}; }
         append(child) { this.children.push(child); }
@@ -17,7 +17,7 @@ function setup() {
                 this.widgets.push({name, value});
             }
         }
-        onConfigure(info) { info.widgets_values.forEach((value, index) => { this.widgets[index].value = value; }); }
+        onConfigure(info) { info.widgets_values.slice(shiftedRestore ? 1 : 0).forEach((value, index) => { this.widgets[index].value = value; }); }
         addDOMWidget(name, type, element, options) { const widget = {name, type, element, options}; this.widgets.push(widget); return widget; }
         computeSize() { return [380, 500]; }
         setSize(size) { this.size = size; }
@@ -48,6 +48,26 @@ test("three buttons select exactly one target and turn adaptation on", () => {
         assert.ok(status.textContent.includes(target));
     }
     assert.equal(node.changes, 3);
+});
+
+test("saved native values restore by name even if the host shifts converted input widgets", () => {
+    const {node, widget, buttons} = setup(true);
+    node.onConfigure({widgets_values: [false, "", "Qwen2.1", true, 3, 180, 512, ""]});
+    assert.equal(widget("use_edited").value, false);
+    assert.equal(widget("edited_prompt").value, "");
+    assert.equal(widget("target").value, "Qwen2.1");
+    assert.equal(widget("refresh").value, 3);
+    assert.equal(buttons[2].attributes["aria-pressed"], "true");
+});
+
+test("named saved values take priority over host positional remapping", () => {
+    const {node, widget, buttons} = setup();
+    node.onConfigure({widgets_values: ["", "Qwen2.1", true], widgets_values_named: {
+        use_edited:false, edited_prompt:"", target:"Qwen2.1", adapt_to_target:true}});
+    assert.equal(widget("edited_prompt").value, "");
+    assert.equal(widget("target").value, "Qwen2.1");
+    assert.equal(buttons[2].attributes["aria-pressed"], "true");
+    assert.equal(widget("soda_target_quick_pick").serialize, false);
 });
 
 test("legacy workflow values keep their positions and restore selected button", () => {

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import folder_paths
 
-from . import core
+from . import core, providers
 
 
 def key_path():
@@ -17,6 +17,7 @@ def key_path():
 
 
 class SodaDeepSeekObserve:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -62,7 +63,8 @@ class SodaDeepSeekObserve:
     )
 
     async def observe(self, image, image_index, max_side, refresh, timeout_seconds):
-        key = core.read_key(key_path())
+        service = providers.resolve(key_path(), vision=True)
+        key = providers.read_key(key_path(), service)
         if image_index >= len(image):
             raise ValueError("image_index 超出图片批次数量。")
         data_url, image_info = core.encode_image(
@@ -84,7 +86,7 @@ class SodaDeepSeekObserve:
                 ],
             },
         ]
-        response, metadata = await core.chat(key, messages, timeout_seconds, 2500)
+        response, metadata = await core.chat(key, messages, timeout_seconds, 2500, service=service)
         record = core.validate_observation(response)
         record["source"] = image_info | {"image_index": image_index}
         record["api"] = metadata
@@ -92,6 +94,7 @@ class SodaDeepSeekObserve:
 
 
 class SodaDeepSeekPrompt:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -143,9 +146,9 @@ class SodaDeepSeekPrompt:
         messages = core.compose_messages(
             observation, target_model, expand, requirements
         )
+        service = providers.resolve(key_path())
         response, metadata = await core.chat(
-            core.read_key(key_path()), messages, timeout_seconds, max_tokens
-        )
+            providers.read_key(key_path(), service), messages, timeout_seconds, max_tokens, service=service)
         prompts = core.validate_prompts(response, expand)
         selected = prompts["expanded_prompt"] if expand else prompts["faithful_prompt"]
         record = {

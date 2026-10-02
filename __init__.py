@@ -17,4 +17,12 @@ NODE_CLASS_MAPPINGS.update(EXPAND_CLASSES)
 NODE_DISPLAY_NAME_MAPPINGS.update(EXPAND_NAMES)
 WEB_DIRECTORY = "./web"
 
+try:
+    from server import PromptServer
+except ImportError:
+    pass
+else:
+    from .providers import register_routes
+    register_routes()
+
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

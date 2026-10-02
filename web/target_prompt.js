@@ -49,7 +49,7 @@ app.registerExtension({
                     buttons[index].setAttribute("aria-pressed", String(active));
                 });
                 const profile = targets.find(([value]) => value === target.value)?.[1] || "";
-                status.textContent = adapt.value ? `最终输出：${target.value} · ${profile}（首次 Flash，重复用缓存）`
+                status.textContent = adapt.value ? `最终输出：${target.value} · ${profile}（首次调用当前 AI，重复用缓存）`
                     : "目标适配关闭：原样输出。点击上方按钮可开启。";
                 this.setDirtyCanvas(true, true);
             };
@@ -62,14 +62,23 @@ app.registerExtension({
                 };
             }
             const widget = this.addDOMWidget("soda_target_quick_pick", "div", container, {serialize: false});
+            widget.serialize = false;
             widget.computeSize = width => [width, 70];
             this.sodaUpdateTargetButtons();
             this.setSize([this.size[0], Math.max(this.size[1], this.computeSize()[1])]);
             return result;
         };
         const configure = nodeType.prototype.onConfigure;
-        nodeType.prototype.onConfigure = function () {
+        nodeType.prototype.onConfigure = function (info) {
             const result = configure?.apply(this, arguments);
+            // Saved files keep the original native order, even when the host migrates converted inputs.
+            ["use_edited", "edited_prompt", "target", "adapt_to_target", "refresh", "timeout_seconds", "anima_token_budget"]
+                .forEach((name, index) => {
+                    const widget = this.widgets?.find(widget => widget.name === name);
+                    if (!widget) return;
+                    if (Object.hasOwn(info.widgets_values_named || {}, name)) widget.value = info.widgets_values_named[name];
+                    else if (info.widgets_values?.[index] !== undefined) widget.value = info.widgets_values[index];
+                });
             this.sodaUpdateTargetButtons?.();
             return result;
         };

@@ -106,6 +106,7 @@ async def expand_cached(tags, natural, path, parameters, refresh, timeout_second
 
 
 class SodaExpansionChoice:
+    IS_CHANGED = classmethod(suite.providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {

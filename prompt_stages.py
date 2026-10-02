@@ -6,6 +6,7 @@ from .suite_nodes import controls, record, user_root
 
 
 class SodaPromptStages:
+    IS_CHANGED = classmethod(suite.providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {

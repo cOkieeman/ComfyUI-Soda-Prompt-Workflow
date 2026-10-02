@@ -1,4 +1,4 @@
-"""DeepSeek image observation and model-specific prompt composition."""
+"""Compatible AI transport, image observation and prompt composition."""
 
 import asyncio
 import base64
@@ -12,6 +12,7 @@ import aiohttp
 import numpy as np
 import tomllib
 from PIL import Image
+from . import providers
 
 ENDPOINT = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"
@@ -183,28 +184,35 @@ def validate_prompts(value: dict, expand: bool) -> dict:
 
 
 async def chat(
-    key: str, messages: list, timeout: int, max_tokens: int
+    key: str, messages: list, timeout: int, max_tokens: int, *, service=None
 ) -> tuple[dict, dict]:
-    content, metadata = await chat_text(key, messages, timeout, max_tokens)
+    content, metadata = await chat_text(key, messages, timeout, max_tokens, service=service)
     return parse_json(content), metadata
 
 
 async def chat_text(
-    key: str, messages: list, timeout: int, max_tokens: int
+    key: str, messages: list, timeout: int, max_tokens: int, *, service=None
 ) -> tuple[str, dict]:
+    service = service or providers.default_service()
+    name = service["name"]
+    if service["endpoint"] != ENDPOINT:
+        messages = [{**message, "content": [{**part, "image_url": {"url": part["image_url"]["url"]}}
+            if part.get("type") == "image_url" else part for part in message["content"]]}
+            if isinstance(message.get("content"), list) else message for message in messages]
     payload = {
-        "model": MODEL,
+        "model": service["model"],
         "messages": messages,
-        "thinking": {"type": "disabled"},
         "max_tokens": max_tokens,
         "stream": False,
     }
+    if service["endpoint"] == ENDPOINT:
+        payload["thinking"] = {"type": "disabled"}
     try:
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=timeout)
         ) as session:
             async with session.post(
-                ENDPOINT,
+                service["endpoint"],
                 json=payload,
                 headers={"Authorization": f"Bearer {key}"},
                 allow_redirects=False,
@@ -218,21 +226,21 @@ async def chat_text(
                         429: "接口限流，请稍后手动重试。",
                     }
                     raise RuntimeError(
-                        f"DeepSeek HTTP {response.status}："
+                        f"{name} HTTP {response.status}："
                         + hints.get(response.status, "服务暂时不可用，请稍后手动重试。")
                     )
                 data = await response.json(content_type=None)
     except (aiohttp.ClientError, asyncio.TimeoutError):
         raise RuntimeError(
-            "DeepSeek 网络失败或超时；没有自动重试，避免重复计费。"
+            f"{name} 网络失败或超时；没有自动重试，避免重复计费。"
         ) from None
     except (json.JSONDecodeError, UnicodeDecodeError):
-        raise RuntimeError("DeepSeek 返回了无法解析的响应。") from None
+        raise RuntimeError(f"{name} 返回了无法解析的响应。") from None
     try:
         choice = data["choices"][0]
         content = choice["message"]["content"]
     except (KeyError, IndexError, TypeError):
-        raise RuntimeError("DeepSeek 响应缺少有效消息。") from None
+        raise RuntimeError(f"{name} 响应缺少有效消息。") from None
     if choice.get("finish_reason") != "stop":
         raise RuntimeError(
             "模型输出被截断或未正常结束；未保存结果。请检查 max_tokens 或服务限制。"
@@ -242,8 +250,10 @@ async def chat_text(
     usage = data.get("usage", {})
     usage = usage if isinstance(usage, dict) else {}
     metadata = {
-        "requested_model": MODEL,
+        "requested_model": service["model"],
         "response_model": data.get("model"),
+        "provider": service["id"],
+        "endpoint": service["endpoint"],
         "usage": {
             k: v
             for k, v in usage.items()

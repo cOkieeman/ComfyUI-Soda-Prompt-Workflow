@@ -20,18 +20,20 @@ Windows portable 用户把 python 换成 python_embeded/python.exe 的实际路�
 
 ## 使用
 
-1. **① 素材入口**：本地图片、作者画廊、DFlow 或文字。选择 DFlow 卡片后，入口立即显示所选图片预览和原词状态，重新打开工作流也会恢复预览；无需运行或调用反推接口。普通 JPG/PNG 可反推；没有元数据时返回空原词。
+1. **① 素材入口**：本地图片、作者画廊、DFlow 或文字。选择 DFlow 卡片后，入口立即显示图片预览和原词状态；切到作者画廊后，单击左侧图片，右侧立即显示缩略图、编号、选中数量和只读网站标签。取消选图或切换来源会清除旧反馈，保存再打开可恢复；无需运行或调用反推接口。画廊标签是网站标注，不代表作者的原始生成词。普通 JPG/PNG 可反推；没有元数据时返回空原词。
 2. **② 处理方式**：原提示词、重新反推或文字创作。没有原词需手动选反推，不会自动调用付费接口。创作用 variant_index 选稿。
 3. **③ 前后缀 / OC**：本地拼接前后缀；OC 替换需开关和设定。前后缀保留已识别标签的结构记录，OC 改写后不复用可能过时的标签。
 4. **④ 扩写选择**：关闭、TIPO、K2 七层英文或 DFlow 中文。默认关闭，一次只执行选中的路线。
-5. **⑤ 目标适配**：点击 **Anima / Krea2 / Qwen 2.1** 快捷按钮，再运行工作流，最终只输出所选模型的提示词。Anima 是标签＋英文短描述，Krea2 是英文自然语言，Qwen2.1 是中文自然语言。首次适配用 Flash，相同输入和目标复用缓存；不改上游反推与扩写规则。手动输入也可适配；关闭 adapt_to_target 后原样输出。Anima 的512 token是可调整的长度偏好，0表示不限制，超预算不截断。
+5. **⑤ 目标适配**：点击 **Anima / Krea2 / Qwen 2.1** 快捷按钮，再运行工作流，最终只输出所选模型的提示词。Anima 是标签＋英文短描述，Krea2 是英文自然语言，Qwen2.1 是中文自然语言。首次适配使用当前 AI 服务，相同输入、目标和服务复用缓存；不改上游反推与扩写规则。手动输入也可适配；关闭 adapt_to_target 后原样输出。Anima 的512 token是可调整的长度偏好，0表示不限制，超预算不截断。
 6. **输出与归档**：正负面分别输出。归档默认开启，DFlow 回写默认关闭。不同页签不能跨页连线，需复制模块进入生图流或复制最终文本。
 
 PNG 的 A1111 parameters 优先。ComfyUI 图仅在已支持采样器直接连接字面文本编码节点、且各采样器结果一致时提取正负面词。复杂连接或多套不同词保留清单和警告，返回空原词，不把负面词拼进正面词。
 
 ## 模型、密钥和预设
 
-反推、文字创作、OC 和 Flash 扩写使用官方 deepseek-flash。从 secrets.example.toml 复制空模板到 ComfyUI/user/soda_prompt_workflow/secrets.toml，在本机填写；也可设置 DEEPSEEK_API_KEY。密钥不进入工作流或记录。TIPO 不需要 Flash 密钥，见 [TIPO-UPDATE.md](TIPO-UPDATE.md)。
+①和⑤底部的 **AI 服务配置 / 切换模型** 是统一入口。可保存 DeepSeek、GLM/智谱、Gemini 和自定义 OpenAI 兼容服务配置；填写 Base URL、文字模型、看图模型和 API Key，点击“保存并启用当前服务”。以后选另一套配置并启用即可，所有反推、文字创作、OC、远程扩写和最终适配共用当前服务。默认仍为原来的 DeepSeek Flash，兼容现有 secrets.toml 或 DEEPSEEK_API_KEY，无需重填。GLM/Gemini 的模型名称按账号实际可用型号填写；看图必须选择支持图片输入的模型。详见 [AI-SERVICES.md](AI-SERVICES.md)。
+
+密钥存入 ComfyUI/user/soda_prompt_workflow/ai_services.json，只在本机保存；读取接口仅返回“是否已配置”，不返回密钥，工作流和记录也不包含密钥。地址不变时 API Key 留空保留旧值；换地址需重填，避免把原服务密钥发到另一地址。保存配置不触发 AI 请求。TIPO 仍完全本地，见 [TIPO-UPDATE.md](TIPO-UPDATE.md)。节点选项中的“Flash”字样是保留的路线名称，实际请求使用统一配置。
 
 WD + Flash 需要固定资源，放入 ComfyUI/user/soda_prompt_workflow/assets/wd-eva02-tagger-2026-canary-onnx-v2：
 
@@ -46,7 +48,7 @@ WD + Flash 需要固定资源，放入 ComfyUI/user/soda_prompt_workflow/assets/
 
 ## 缓存与边界
 
-Flash 缓存位于 ComfyUI/user/soda_prompt_workflow/cache-v2。正在请求或结果未确认时不自动重发；确认失败后改变 refresh 才重新调用。TIPO 缓存位于 tipo-cache-v1，输入、模型、种子、参数或 refresh 改变时重做。
+AI 缓存位于 ComfyUI/user/soda_prompt_workflow/cache-v2，按服务地址、模型和请求区分；原默认 Flash 缓存继续可用。切换当前服务会使相关节点的运行缓存更新。正在请求或结果未确认时不自动重发；确认失败后改变 refresh 才重新调用。TIPO 缓存位于 tipo-cache-v1，输入、模型、种子、参数或 refresh 改变时重做。
 
 Anima WD + Flash 的逐标签核验决定是标签保留依据。槽位漏词、重复或包含已剔除的词时，由本地程序整理并记录补回/移除清单，不再为机械标签整理调用 Flash；未知标签的补回槽位会标记待人工确认。已有反推缓存可直接复用，修复这类错误无需增加 refresh。视觉决定缺失或格式损坏仍明确报错。
 
@@ -60,6 +62,6 @@ TIPO 使用一次性独立进程，超时或取消时终止，结束后释放进
 python tests/run_tests.py
 ```
 
-前端预览与快捷按钮回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs tests/test_target_frontend.mjs`，不需要安装 npm 依赖。
+前端预览、快捷按钮与服务配置回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs tests/test_target_frontend.mjs tests/test_services_frontend.mjs`，不需要安装 npm 依赖。
 
 离线测试不读取真实密钥、不调用付费API、不下载模型。自动测试配置在 `.github/workflow-templates/offline-tests.yml`，使用 CPU PyTorch；当前发布凭据缺少 workflow 权限，模板尚未启用。具有相应权限后将它复制到 `.github/workflows/tests.yml` 可启用。验证边界见 [VERIFICATION.md](VERIFICATION.md)。自建代码采用 MIT，第三方资产见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [SOURCES.md](SOURCES.md)。

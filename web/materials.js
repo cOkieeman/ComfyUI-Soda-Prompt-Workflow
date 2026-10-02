@@ -16,8 +16,13 @@ function addMaterialPreview(node) {
     image.style.cssText = "width:100%;height:180px;object-fit:contain;background:#17181d";
     const status = element("div", "", container);
     status.style.cssText = "font-size:12px;line-height:18px;overflow-wrap:anywhere;padding-top:5px";
+    const tags = element("textarea", "", container);
+    tags.readOnly = true;
+    tags.setAttribute("aria-label", "所选画廊图片的网站标签");
+    tags.style.cssText = "box-sizing:border-box;width:100%;height:140px;margin-top:6px;padding:6px;background:#17181d;color:#ddd;border:1px solid #555;resize:none";
     let height = 0, revision = 0;
     const widget = node.addDOMWidget("soda_material_preview", "div", container, {serialize: false});
+    widget.serialize = false;
     widget.computeSize = width => [width, height];
     const resize = () => {
         node.setSize([node.size[0], Math.max(node.size[1], node.computeSize()[1])]);
@@ -28,10 +33,55 @@ function addMaterialPreview(node) {
         const source = node.widgets.find(w => w.name === "source");
         const key = node.widgets.find(w => w.name === "card_key")?.value;
         const port = Number(node.widgets.find(w => w.name === "port")?.value);
-        container.hidden = !!source && source.value !== "DFlow 素材";
+        const galleryMode = source?.value === "作者画廊";
+        container.hidden = !!source && source.value !== "DFlow 素材" && !galleryMode;
         image.hidden = true;
         image.removeAttribute("src");
+        tags.hidden = true;
+        tags.value = "";
         height = container.hidden ? 0 : 44;
+        if (source) node.title = `素材入口 · ${source.value}`;
+        if (galleryMode) {
+            const gallery = node.getInputNode(node.inputs?.findIndex(input => input.name === "gallery_image") ?? 0);
+            const promptGallery = node.getInputNode(node.inputs?.findIndex(input => input.name === "gallery_text") ?? 1);
+            const selection = gallery?.widgets?.find(input => input.name === "selection_data");
+            status.textContent = "尚未选择画廊图片，请在左侧单击一张图片。";
+            if (!gallery || gallery !== promptGallery) {
+                status.textContent = "请将同一个画廊的 images、prompts 连接到 gallery_image、gallery_text。";
+            } else if (selection) {
+                try {
+                    const data = JSON.parse(selection.value || "{}");
+                    const selections = Array.isArray(data.selections) ? data.selections : [];
+                    const selected = selections[0];
+                    if (selected) {
+                        const site = selected.source_site === "gelbooru" ? "Gelbooru" : "Danbooru";
+                        const name = `${site} #${selected.post_id}`;
+                        node.title = `素材入口 · ${name}`;
+                        status.textContent = `${name} · 已选 ${selections.length} 张${selections.length > 1 ? "（预览第 1 张）" : ""} · ${selected.prompt ? "有网站标签，可在②使用原词或重新反推。" : "暂无网站标签，请在②重新反推。"}`;
+                        tags.value = typeof selected.prompt === "string" ? selected.prompt : "";
+                        tags.hidden = !tags.value;
+                        height = tags.hidden ? 72 : 220;
+                        if (/^https?:\/\//i.test(selected.image_url || "")) {
+                            image.alt = name;
+                            image.hidden = false;
+                            height += 180;
+                            image.onerror = () => {
+                                if (current !== revision) return;
+                                image.hidden = true;
+                                height -= 180;
+                                status.textContent = `${name} · 已选择，缩略图读取失败；网站标签保留，可重新选图重试。`;
+                                resize();
+                            };
+                            image.src = api.apiURL(`/danbooru_gallery/image_proxy?url=${encodeURIComponent(selected.image_url)}`);
+                        }
+                    }
+                } catch {
+                    status.textContent = "画廊选择数据无法读取，请在左侧重新选择图片。";
+                }
+            }
+            resize();
+            return;
+        }
         status.textContent = key ? "正在读取所选 DFlow 素材…" : "尚未选择 DFlow 素材。";
         resize();
         if (container.hidden || !key) return;
@@ -44,6 +94,7 @@ function addMaterialPreview(node) {
             }
             if (current !== revision) return;
             if (!card) throw new Error("所选素材已不存在，请重新选择。");
+            node.title = `素材入口 · ${card.name.slice(0, 40)}`;
             status.textContent = `${card.name} · ${card.prompt ? "有原提示词" : "暂无原提示词；请在②选择‘重新反推’"}`;
             if (card.image_path) {
                 image.alt = card.name;
@@ -177,12 +228,49 @@ app.registerExtension({
         if (nodeData.name === "SodaGallerySource") {
             const gallery = app.extensions.find(e => e.name === "Comfy.DanbooruGallery");
             if (gallery) await gallery.beforeRegisterNodeDef(nodeType, {...nodeData, name: "DanbooruGalleryNode"}, app);
+            const refreshConsumers = node => {
+                const consumers = new Set();
+                for (const output of node.outputs || []) {
+                    for (const id of output.links || []) {
+                        const link = node.graph?.links[id];
+                        const consumer = node.graph?.getNodeById(link?.target_id);
+                        if (consumer?.widgets?.find(widget => widget.name === "source")?.value === "作者画廊") consumers.add(consumer);
+                    }
+                }
+                for (const consumer of consumers) consumer.sodaRefreshMaterialPreview?.();
+            };
+            const created = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function (...args) {
+                const result = created?.apply(this, args);
+                const selection = this.widgets?.find(widget => widget.name === "selection_data");
+                if (selection) {
+                    const callback = selection.callback;
+                    selection.callback = (...values) => {
+                        const result = callback?.apply(selection, values);
+                        refreshConsumers(this);
+                        return result;
+                    };
+                }
+                return result;
+            };
+            const configure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function (...args) {
+                const result = configure?.apply(this, args);
+                refreshConsumers(this);
+                return result;
+            };
             return;
         }
         if (!["SodaDFlowSource", "SodaUnifiedSource"].includes(nodeData.name)) return;
         const configure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function (...args) {
             const result = configure?.apply(this, args);
+            this.sodaRefreshMaterialPreview?.();
+            return result;
+        };
+        const connections = nodeType.prototype.onConnectionsChange;
+        nodeType.prototype.onConnectionsChange = function (...args) {
+            const result = connections?.apply(this, args);
             this.sodaRefreshMaterialPreview?.();
             return result;
         };
@@ -195,6 +283,7 @@ app.registerExtension({
                 button.style.cssText = "width:100%;height:30px;border:1px solid #666;border-radius:5px;background:#343840;color:#eee;cursor:pointer";
                 button.onclick = action;
                 const widget = this.addDOMWidget(name, "button", button, {serialize: false});
+                widget.serialize = false;
                 widget.computeSize = width => [width, 32];
             };
             addButton("soda_pick_material", "选择 DFlow 素材", () => chooseMaterial(this));

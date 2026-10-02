@@ -7,7 +7,7 @@ import aiohttp
 import numpy as np
 from PIL import Image, ImageOps
 
-from . import core, suite
+from . import core, providers, suite
 from .suite_nodes import SodaReferenceSuite, record, controls
 
 
@@ -93,6 +93,7 @@ class SodaDFlowSource:
 
 
 class SodaMaterialPrompt:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {

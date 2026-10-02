@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .env
 secrets.toml
+ai_services.json
+ai_services.tmp
 .venv/
 .pytest_cache/
 .ruff_cache/

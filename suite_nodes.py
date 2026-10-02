@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import folder_paths
 
-from . import core, local_pipeline as local, suite, target_prompt as target_adapter
+from . import core, providers, local_pipeline as local, suite, target_prompt as target_adapter
 from .nodes import key_path
 from .preset_config import read_preset
 
@@ -36,6 +36,7 @@ def display(prompt, detail):
 
 
 class SodaReferenceSuite:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"image": ("IMAGE",),
@@ -116,6 +117,7 @@ class SodaReferenceSuite:
 
 
 class SodaTextSuite:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"requirements": ("STRING", {"multiline": True, "default": "成年探险者在水晶洞穴中阅读笔记，温暖灯光与蓝色晶体反光。"}), **controls()}}
@@ -138,6 +140,7 @@ class SodaTextSuite:
 
 
 class SodaExpandSuite:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
@@ -177,6 +180,7 @@ class SodaExpandSuite:
 
 
 class SodaPromptOutput:
+    IS_CHANGED = classmethod(providers.changed)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
@@ -185,7 +189,7 @@ class SodaPromptOutput:
             "edited_prompt": ("STRING", {"multiline": True, "default": ""}),
             "target": (target_adapter.TARGETS,),
         }, "optional": {"source_record": ("STRING", {"forceInput": True, "lazy": True}),
-            "adapt_to_target": ("BOOLEAN", {"default": True, "tooltip": "将选中的原稿或手动输入适配到目标模型。首次用 Flash；相同输入/目标复用缓存。关闭后原样输出。"}),
+            "adapt_to_target": ("BOOLEAN", {"default": True, "tooltip": "将选中的原稿或手动输入适配到目标模型。首次使用当前 AI 服务；相同输入/目标/服务复用缓存。关闭后原样输出。"}),
             **controls(),
             "anima_token_budget": ("INT", {"default": 512, "min": 0, "max": 8192,
                 "tooltip": "Anima 输出长度偏好，0表示不限制；不是模型硬上限。"})}}
@@ -219,6 +223,7 @@ class SodaPromptOutput:
         api, response, tags = None, None, []
         adapted = False
         already_adapted = (matches and not use_edited and source.get("adapted") is True
+                           and source.get("ai_service", providers.default_fingerprint()) == providers.fingerprint(key_path())
                            and source.get("target") == target and source.get("target_profile_version") == target_adapter.VERSION
                            and source.get("validation", {}).get("passed") is True
                            and (target != "Anima" or source["validation"].get("budget") == anima_token_budget))
@@ -244,7 +249,7 @@ class SodaPromptOutput:
                         faithful_prompt=source.get("faithful_prompt", source_prompt) if matches else adaptation_input,
                         selected_prompt=prompt, validation=validation,
                         adaptation_input=adaptation_input, adapted=adapted,
-                        target_profile_version=target_adapter.VERSION, api=api,
+                        target_profile_version=target_adapter.VERSION, ai_service=providers.fingerprint(key_path()), api=api,
                         api_calls=1 if api and not api.get("cache_hit") else 0)
         if tags:
             result["tags"] = tags

@@ -1,10 +1,10 @@
-"""Full source workflows. External model calls remain Flash-only."""
+"""Full source workflows sharing the selected AI service."""
 import hashlib
 import json
 import re
 from pathlib import Path
 
-from . import core, local_pipeline as local
+from . import core, providers, local_pipeline as local
 
 VERSION = "2.0"
 ANIMA = "Anima · WD + Flash"
@@ -40,8 +40,11 @@ def system_rules(branch):
 
 async def cached_chat(directory, key_path, stage, messages, refresh, timeout, max_tokens, *, text_output=False):
     """Durable response cache. An interrupted/failed request is never silently resubmitted."""
-    signature_data = {"version": VERSION, "model": core.MODEL, "stage": stage,
+    service = providers.resolve(key_path, providers.has_images(messages))
+    signature_data = {"version": VERSION, "model": service["model"], "stage": stage,
                       "messages": messages, "refresh": refresh, "max_tokens": max_tokens}
+    if service != providers.default_service():
+        signature_data["service"] = service
     if text_output:
         signature_data["response_format"] = "plain_text"
     signature = dump(signature_data)
@@ -52,18 +55,20 @@ async def cached_chat(directory, key_path, stage, messages, refresh, timeout, ma
     if result_path.exists():
         value = json.loads(result_path.read_text(encoding="utf-8"))
         return value["response"], value["api"] | {"cache_hit": True, "cache_id": digest}
-    key = core.read_key(key_path)
+    key = providers.read_key(key_path, service)
     marker = directory / (digest + ".pending")
     try:
         with marker.open("x", encoding="utf-8") as stream:
-            stream.write(dump({"stage": stage, "model": core.MODEL}))
+            stream.write(dump({"stage": stage, "model": service["model"]}))
     except FileExistsError:
         raise RuntimeError("相同请求正在执行或上次结果未确认。请等待；确认失败后增加 refresh 才会重新收费调用。") from None
     # Only the response is persisted: no key, image payload, or raw HTTP headers.
     transport = core.chat_text if text_output else core.chat
-    response, api = await transport(key, messages, timeout, max_tokens)
-    if api.get("response_model") != core.MODEL:
-        raise RuntimeError("服务返回的模型标识不是 deepseek-flash，已停止；未切换模型。")
+    response, api = await transport(key, messages, timeout, max_tokens, service=service)
+    if api.get("response_model") != service["model"]:
+        if service["strict_model"]:
+            raise RuntimeError(f"服务返回的模型标识不是 {service['model']}，已停止；未切换模型。")
+        api["model_warning"] = "返回模型名称与请求不同，可能是版本别名；请核对服务的路由规则。"
     value = {"response": response, "api": api, "stage": stage}
     temporary = result_path.with_suffix(".tmp")
     temporary.write_text(dump(value), encoding="utf-8")
