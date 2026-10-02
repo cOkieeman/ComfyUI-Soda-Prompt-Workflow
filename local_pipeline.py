@@ -103,6 +103,54 @@ def reviewed_tags(tagged, review):
     return kept, scored
 
 
+def reconcile_reverse_slots(slots, kept, tagged):
+    """Reconcile transport slots with authoritative WD/visual review decisions.
+
+    This cannot add a visual fact or change a keep decision. Preserve the
+    model's grouping where possible; unknown missing tags remain in the text
+    but require manual grouping review rather than a false validation pass.
+    """
+    if not isinstance(slots, dict) or set(slots) - set(SLOTS):
+        raise ValueError("反推槽位必须是八槽位对象，不能含未知槽位。")
+    result = {slot: [] for slot in SLOTS}
+    audit = {name: [] for name in ("restored_tags", "removed_tags", "deduplicated_tags", "unassigned_tags")}
+    allowed, seen = set(kept), set()
+    for slot in SLOTS:
+        values = slots.get(slot, [])
+        if not isinstance(values, list) or not all(isinstance(tag, str) and tag.strip() and "," not in tag for tag in values):
+            raise ValueError("反推槽位必须为单标签字符串数组。")
+        for value in values:
+            tag = validator.normalize_tag(value)
+            if tag not in allowed:
+                audit["removed_tags"].append(tag)
+            elif tag in seen:
+                audit["deduplicated_tags"].append(tag)
+            else:
+                result[slot].append(tag)
+                seen.add(tag)
+    characters = {validator.normalize_tag(tag) for tag in tagged["character"]}
+    hints = {"cat girl": "appearance", "cat boy": "appearance", "cleavage": "appearance",
+             "paw print": "clothing_props", "signature": "scene", "artist name": "scene"}
+    for tag in kept:
+        if tag in seen:
+            continue
+        if tag in tagged["rating"]:
+            slot = "rating"
+        elif re.fullmatch(r"(?:\d+[+]?(?:girl|boy|other)s?|solo|multiple girls|multiple boys)", tag):
+            slot = "count"
+        elif tag in characters:
+            slot = "character"
+        else:
+            slot = hints.get(tag)
+        if slot is None:
+            slot = "scene"
+            audit["unassigned_tags"].append(tag)
+        result[slot].append(tag)
+        seen.add(tag)
+        audit["restored_tags"].append(tag)
+    return result, audit
+
+
 @lru_cache(maxsize=1)
 def tokenizer():
     # No heuristic fallback: validation must use the shipped upstream tokenizer.

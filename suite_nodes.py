@@ -83,16 +83,11 @@ class SodaReferenceSuite:
             original_response = response
             repairs = []
             kept, _ = local.reviewed_tags(tagged, response)
-            try:
-                report = suite.validate_reverse(tagged, response)
-            except ValueError:
-                repair, repair_api = await call("anima_slot_repair", [
-                    {"role": "system", "content": "Return JSON {\"slots\":{...}}. Sort every provided allowed tag exactly once into the eight requested slots. Preserve exact tag strings. Do not fold, delete, add tags or change decisions. This is a mechanical formatting repair."},
-                    {"role": "user", "content": suite.dump({"allowed_tags": kept, "slot_names": list(local.SLOTS), "previous_slots": response.get("slots")})}],
-                    refresh, timeout_seconds, 2500)
-                response = response | {"slots": repair.get("slots")}
-                repairs.append({"kind": "slot_repair", "api": repair_api})
-                report = suite.validate_reverse(tagged, response)
+            slots, slot_audit = local.reconcile_reverse_slots(response.get("slots"), kept, tagged)
+            response = response | {"slots": slots}
+            if any(slot_audit.values()):
+                repairs.append({"kind": "local_slot_reconciliation", **slot_audit, "api_calls": 0})
+            report = suite.validate_reverse(tagged, response)
             if report["tokens"] > 512 and local.token_count(", ".join(report["tags"]))[0] < 512:
                 repair, repair_api = await call("anima_nl_shorten", [
                     {"role": "system", "content": "Return JSON {\"nl\":\"two short English sentences\"}. Shorten only the supplied natural language while retaining key visible spatial/action/light relationships. No invented details. Tags are immutable. Aim under the given remaining T5 token budget."},
@@ -101,6 +96,9 @@ class SodaReferenceSuite:
                 response = response | {"nl": repair.get("nl")}
                 repairs.append({"kind": "nl_shorten", "api": repair_api})
                 report = suite.validate_reverse(tagged, response)
+            if slot_audit["unassigned_tags"]:
+                report["problems"].append("补回的标签槽位待人工确认：" + ", ".join(slot_audit["unassigned_tags"]))
+                report["passed"] = False
             result = record("anima_reverse", source=image_info, wd=tagged, review=response,
                             original_review=original_response, repairs=repairs,
                             validation=report, api=api, faithful_prompt=report["text"], tags=report["tags"])

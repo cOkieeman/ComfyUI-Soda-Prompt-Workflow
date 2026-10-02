@@ -48,6 +48,8 @@ WD + Flash 需要固定资源，放入 ComfyUI/user/soda_prompt_workflow/assets/
 
 Flash 缓存位于 ComfyUI/user/soda_prompt_workflow/cache-v2。正在请求或结果未确认时不自动重发；确认失败后改变 refresh 才重新调用。TIPO 缓存位于 tipo-cache-v1，输入、模型、种子、参数或 refresh 改变时重做。
 
+Anima WD + Flash 的逐标签核验决定是标签保留依据。槽位漏词、重复或包含已剔除的词时，由本地程序整理并记录补回/移除清单，不再为机械标签整理调用 Flash；未知标签的补回槽位会标记待人工确认。已有反推缓存可直接复用，修复这类错误无需增加 refresh。视觉决定缺失或格式损坏仍明确报错。
+
 TIPO 使用一次性独立进程，超时或取消时终止，结束后释放进程持有的显存。每个 ComfyUI 事件循环一次只启动一个 TIPO 进程，等待计入超时，模型启动有额外开销。
 
 归档在 ComfyUI/output/soda_prompt_workflow，保留来源、原稿、扩写、手动稿和参数。格式校验不保证视觉准确性，请在第⑤步核对人物、服装、动作和场景。
