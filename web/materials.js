@@ -8,18 +8,114 @@ function element(tag, text, parent) {
     return el;
 }
 
+function openImagePreview(url, name) {
+    const dialog = element("dialog");
+    dialog.setAttribute("aria-label", "素材大图预览");
+    dialog.style.cssText = "width:94vw;height:90vh;max-width:none;max-height:none;box-sizing:border-box;padding:16px;background:#202126;color:#eee;border:1px solid #666;border-radius:12px;overflow:hidden";
+    const layout = element("div", "", dialog);
+    layout.style.cssText = "height:100%;display:flex;flex-direction:column;gap:12px";
+    const toolbar = element("div", "", layout);
+    toolbar.style.cssText = "display:flex;align-items:center;flex-wrap:wrap;gap:8px";
+    const title = element("strong", name, toolbar);
+    title.style.cssText = "flex:1;min-width:160px;overflow-wrap:anywhere";
+    const button = (label, action) => {
+        const result = element("button", label, toolbar);
+        result.type = "button";
+        result.onclick = action;
+        result.style.cssText = "padding:6px 12px;background:#343840;color:#eee;border:1px solid #666;border-radius:5px;cursor:pointer";
+        return result;
+    };
+    let scale = 1, x = 0, y = 0, drag = null, ready = false;
+    const stage = element("div", "", layout);
+    stage.style.cssText = "position:relative;flex:1;min-height:0;overflow:hidden;background:#111218;touch-action:none;cursor:grab";
+    const image = element("img", "", stage);
+    image.alt = name;
+    image.draggable = false;
+    image.style.cssText = "position:absolute;left:0;top:0;max-width:none;max-height:none;transform-origin:0 0;user-select:none;pointer-events:none";
+    const info = element("div", "正在读取完整图片…", layout);
+    info.style.cssText = "font-size:13px;color:#c0c4cd";
+    const render = () => {
+        image.style.transform = `translate(${x}px,${y}px) scale(${scale})`;
+        info.textContent = `${image.naturalWidth} × ${image.naturalHeight} · ${Math.round(scale * 100)}% · 滚轮缩放 / 拖动移动 / 双击适应窗口 / Esc 关闭`;
+    };
+    const zoom = (next, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2) => {
+        if (!ready) return;
+        next = Math.max(0.02, Math.min(8, next));
+        const ratio = next / scale;
+        x = cx - (cx - x) * ratio;
+        y = cy - (cy - y) * ratio;
+        scale = next;
+        render();
+    };
+    const fit = () => {
+        if (!ready) return;
+        scale = Math.min(1, stage.clientWidth / image.naturalWidth, stage.clientHeight / image.naturalHeight);
+        x = (stage.clientWidth - image.naturalWidth * scale) / 2;
+        y = (stage.clientHeight - image.naturalHeight * scale) / 2;
+        render();
+    };
+    button("缩小", () => zoom(scale / 1.25));
+    button("放大", () => zoom(scale * 1.25));
+    button("100%", () => zoom(1));
+    button("适应窗口", fit);
+    button("关闭大图", () => dialog.close());
+    stage.addEventListener("wheel", event => {
+        event.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        zoom(scale * Math.exp(-event.deltaY * 0.001), event.clientX - rect.left, event.clientY - rect.top);
+    }, {passive: false});
+    stage.addEventListener("pointerdown", event => {
+        if (!ready || event.button !== 0) return;
+        event.preventDefault();
+        drag = {id:event.pointerId, cx:event.clientX, cy:event.clientY, x, y};
+        stage.setPointerCapture(event.pointerId);
+        stage.style.cursor = "grabbing";
+    });
+    stage.addEventListener("pointermove", event => {
+        if (!drag || event.pointerId !== drag.id) return;
+        x = drag.x + event.clientX - drag.cx;
+        y = drag.y + event.clientY - drag.cy;
+        render();
+    });
+    const stopDrag = () => { drag = null; stage.style.cursor = "grab"; };
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) stage.addEventListener(type, stopDrag);
+    stage.addEventListener("dblclick", fit);
+    image.onload = () => { ready = true; fit(); };
+    image.onerror = () => { ready = false; image.hidden = true; info.textContent = "大图读取失败，请确认图片仍存在或重新选择素材。"; };
+    document.body.append(dialog);
+    dialog.showModal();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    observer?.observe(stage);
+    dialog.addEventListener("close", () => { observer?.disconnect(); image.onload = image.onerror = null; dialog.remove(); }, {once:true});
+    image.src = url;
+    return dialog;
+}
+
 function addMaterialPreview(node) {
     const container = element("div");
     container.dataset.sodaMaterialPreview = "true";
     container.style.cssText = "width:100%;box-sizing:border-box;padding:8px;background:#202126;border-radius:6px;color:#eee;overflow:hidden";
     const image = element("img", "", container);
-    image.style.cssText = "width:100%;height:180px;object-fit:contain;background:#17181d";
+    image.style.cssText = "width:100%;height:180px;object-fit:contain;background:#17181d;cursor:zoom-in";
+    image.title = "点击查看大图";
     const status = element("div", "", container);
     status.style.cssText = "font-size:12px;line-height:18px;overflow-wrap:anywhere;padding-top:5px";
     const tags = element("textarea", "", container);
     tags.readOnly = true;
     tags.setAttribute("aria-label", "所选画廊图片的网站标签");
     tags.style.cssText = "box-sizing:border-box;width:100%;height:140px;margin-top:6px;padding:6px;background:#17181d;color:#ddd;border:1px solid #555;resize:none";
+    const large = element("button", "查看大图", container);
+    large.type = "button";
+    large.style.cssText = "width:100%;height:30px;margin-top:6px;background:#343840;color:#eee;border:1px solid #666;border-radius:5px;cursor:pointer";
+    let fullUrl = "", viewer = null;
+    const clearViewer = () => { viewer?.close(); viewer = null; fullUrl = ""; large.hidden = true; };
+    const showViewer = () => {
+        if (!fullUrl || image.hidden) return;
+        viewer?.close();
+        viewer = openImagePreview(fullUrl, image.alt);
+    };
+    large.onclick = image.onclick = showViewer;
+    const setImage = (thumbnail, full) => { fullUrl = full; large.hidden = false; image.src = thumbnail; };
     let height = 0, revision = 0;
     const widget = node.addDOMWidget("soda_material_preview", "div", container, {serialize: false});
     widget.serialize = false;
@@ -30,6 +126,7 @@ function addMaterialPreview(node) {
     };
     node.sodaRefreshMaterialPreview = async card => {
         const current = ++revision;
+        clearViewer();
         const source = node.widgets.find(w => w.name === "source");
         const key = node.widgets.find(w => w.name === "card_key")?.value;
         const port = Number(node.widgets.find(w => w.name === "port")?.value);
@@ -53,7 +150,7 @@ function addMaterialPreview(node) {
                 status.textContent = `${name} · 正在读取本地图片预览…`;
                 image.alt = name;
                 image.hidden = false;
-                height = 230;
+                height = 266;
                 image.onload = () => {
                     if (current !== revision) return;
                     status.textContent = `${name} · 已选本地图片；可在②读取原词或重新反推。`;
@@ -61,17 +158,20 @@ function addMaterialPreview(node) {
                 image.onerror = () => {
                     if (current !== revision) return;
                     image.hidden = true;
+                    clearViewer();
                     height = 62;
                     status.textContent = "本地图片预览读取失败，请确认路径或重新上传。完整路径预览更新后需重启 ComfyUI。";
                     resize();
                 };
                 if (/^(?:[a-z]:\/|\/)/i.test(normalized)) {
-                    image.src = api.apiURL(`/soda/materials/local/image?image_path=${encodeURIComponent(path)}&v=${Date.now()}`);
+                    const url = api.apiURL(`/soda/materials/local/image?image_path=${encodeURIComponent(path)}&v=${Date.now()}`);
+                    setImage(url, `${url}&full=1`);
                 } else {
                     const annotation = normalized.match(/ \[(input|output|temp)\]$/);
                     const relative = annotation ? normalized.slice(0, annotation.index) : normalized;
                     const slash = relative.lastIndexOf("/");
-                    image.src = api.apiURL(`/view?filename=${encodeURIComponent(relative.slice(slash + 1))}&subfolder=${encodeURIComponent(relative.slice(0, Math.max(0, slash)))}&type=${annotation?.[1] || "input"}&preview=webp&v=${Date.now()}`);
+                    const url = api.apiURL(`/view?filename=${encodeURIComponent(relative.slice(slash + 1))}&subfolder=${encodeURIComponent(relative.slice(0, Math.max(0, slash)))}&type=${annotation?.[1] || "input"}&v=${Date.now()}`);
+                    setImage(`${url}&preview=webp`, url);
                 }
             }
             resize();
@@ -100,15 +200,17 @@ function addMaterialPreview(node) {
                         if (/^https?:\/\//i.test(selected.image_url || "")) {
                             image.alt = name;
                             image.hidden = false;
-                            height += 180;
+                            height += 216;
                             image.onerror = () => {
                                 if (current !== revision) return;
                                 image.hidden = true;
-                                height -= 180;
+                                clearViewer();
+                                height -= 216;
                                 status.textContent = `${name} · 已选择，缩略图读取失败；网站标签保留，可重新选图重试。`;
                                 resize();
                             };
-                            image.src = api.apiURL(`/danbooru_gallery/image_proxy?url=${encodeURIComponent(selected.image_url)}`);
+                            const url = api.apiURL(`/danbooru_gallery/image_proxy?url=${encodeURIComponent(selected.image_url)}`);
+                            setImage(url, url);
                         }
                     }
                 } catch {
@@ -135,15 +237,17 @@ function addMaterialPreview(node) {
             if (card.image_path) {
                 image.alt = card.name;
                 image.hidden = false;
-                height = 230;
+                height = 266;
                 image.onerror = () => {
                     if (current !== revision) return;
                     image.hidden = true;
+                    clearViewer();
                     height = 62;
                     status.textContent = "图片读取失败，请确认 DFlow 正在运行并重新选择素材。";
                     resize();
                 };
-                image.src = api.apiURL(`/soda/materials/dflow/image?port=${port}&key=${encodeURIComponent(key)}`);
+                const url = api.apiURL(`/soda/materials/dflow/image?port=${port}&key=${encodeURIComponent(key)}`);
+                setImage(url, `${url}&full=1`);
             } else {
                 height = 62;
                 status.textContent += " · 没有图片或高清缓存未就绪。";
@@ -158,6 +262,7 @@ function addMaterialPreview(node) {
     const removed = node.onRemoved;
     node.onRemoved = function (...args) {
         revision++;
+        clearViewer();
         return removed?.apply(this, args);
     };
     for (const name of ["source", "image_path", "port", "card_key"]) {

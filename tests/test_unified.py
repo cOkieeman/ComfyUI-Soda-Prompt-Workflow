@@ -33,6 +33,19 @@ class UnifiedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node.check_lazy_status(u.GALLERY),['gallery_image','gallery_text'])
         self.assertFalse(u.SodaGallerySource.OUTPUT_NODE)
 
+    def test_full_preview_preserves_dimensions_and_exif_orientation(self):
+        material = sys.modules['soda_test.material_nodes']
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'original.jpg'
+            exif = Image.Exif()
+            exif[274] = 6
+            Image.new('RGB', (1200, 800), (20, 90, 160)).save(path, exif=exif)
+            image = Image.open(io.BytesIO(material.local_thumbnail(str(path), full=True)))
+            self.assertEqual(image.size, (800, 1200))
+            self.assertEqual(Image.open(io.BytesIO(material.preview_bytes(io.BytesIO(path.read_bytes()), full=True))).size, (800, 1200))
+            thumbnail = Image.open(io.BytesIO(material.local_thumbnail(str(path))))
+            self.assertLessEqual(max(thumbnail.size), 320)
+
     async def test_text_does_not_touch_dflow_or_file(self):
         with patch.object(u.SodaDFlowSource,'run',new_callable=AsyncMock) as remote, patch.object(u.Image,'open') as disk:
             result=await u.SodaUnifiedSource().run(u.TEXT,'missing.png','kept',4173,'invalid')

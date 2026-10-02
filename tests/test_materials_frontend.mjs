@@ -5,13 +5,17 @@ import vm from "node:vm";
 
 function setup() {
     class Element {
-        constructor() { this.style = {}; this.dataset = {}; this.children = []; this.events = {}; }
+        constructor() { this.style = {}; this.dataset = {}; this.children = []; this.events = {}; this.clientWidth = 900; this.clientHeight = 600; }
         append(child) { this.children.push(child); }
         removeAttribute(name) { delete this[name]; }
         setAttribute(name, value) { this[name] = value; }
         addEventListener(name, action) { this.events[name] = action; }
         click() { this.clicked = true; }
         remove() { this.removed = true; }
+        showModal() { this.open = true; }
+        close() { this.open = false; this.events.close?.(); }
+        getBoundingClientRect() { return {left:0, top:0}; }
+        setPointerCapture() {}
     }
     class SourceNode {
         constructor() { this.widgets = []; this.size = [500, 800]; }
@@ -74,6 +78,61 @@ test("restored local upload displays an encoded image preview without executing 
     assert.equal(url.searchParams.get("type"), "input");
     assert.equal(view.widget("text").value, "keep prompt");
     assert.equal(view.pending.length, 0);
+});
+
+test("large local viewer reads the original and supports fit, zoom, pan and source cleanup", () => {
+    const view = setup();
+    view.node.onConfigure({widgets_values: ["本地图片 / PNG元数据", "folder/image.png [output]", "", 4173, ""]});
+    const large = view.container.children[3];
+    assert.equal(large.hidden, false);
+    large.onclick();
+    const dialog = view.body.children.at(-1);
+    assert.equal(dialog.open, true);
+    const [toolbar, stage, info] = dialog.children[0].children;
+    const full = stage.children[0];
+    const url = new URL(full.src, "http://localhost");
+    assert.equal(url.searchParams.get("preview"), null);
+    assert.equal(url.searchParams.get("type"), "output");
+    assert.equal(url.searchParams.get("subfolder"), "folder");
+    full.naturalWidth = 1200; full.naturalHeight = 1800;
+    full.onload();
+    assert.match(info.textContent, /1200 × 1800 · 33%/);
+    const button = name => toolbar.children.find(child => child.textContent === name);
+    button("100%").onclick();
+    assert.match(info.textContent, /100%/);
+    const before = full.style.transform;
+    stage.events.pointerdown({button:0, pointerId:1, clientX:10, clientY:10, preventDefault() {}});
+    stage.events.pointermove({pointerId:1, clientX:70, clientY:90});
+    assert.notEqual(full.style.transform, before);
+    stage.events.pointerup();
+    stage.events.wheel({deltaY:-100, clientX:400, clientY:300, preventDefault() {}});
+    assert.match(info.textContent, /111%/);
+    button("适应窗口").onclick();
+    assert.match(info.textContent, /33%/);
+    view.widget("image_path").value = "";
+    view.widget("image_path").callback();
+    assert.equal(dialog.removed, true);
+    assert.equal(large.hidden, true);
+    large.onclick();
+    assert.equal(view.body.children.length, 1);
+});
+
+test("absolute and DFlow large images request full dimensions and failure removes stale controls", async () => {
+    const view = setup();
+    view.node.onConfigure({widgets_values: ["本地图片 / PNG元数据", "C:/image.png", "", 4173, ""]});
+    view.image.onclick();
+    let dialog = view.body.children.at(-1);
+    assert.match(dialog.children[0].children[1].children[0].src, /local\/image\?.*&full=1/);
+    view.widget("source").value = "DFlow 素材";
+    view.widget("card_key").value = "favorite:new";
+    await view.node.sodaRefreshMaterialPreview({key:"favorite:new", name:"New", image_path:"/new.png", prompt:""});
+    assert.equal(dialog.removed, true);
+    view.image.onclick();
+    dialog = view.body.children.at(-1);
+    assert.match(dialog.children[0].children[1].children[0].src, /dflow\/image\?.*&full=1/);
+    view.image.onerror();
+    assert.equal(dialog.removed, true);
+    assert.equal(view.container.children[3].hidden, true);
 });
 
 test("changing or clearing a local path refreshes preview and stale image errors are ignored", async () => {

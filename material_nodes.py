@@ -184,14 +184,19 @@ NODE_DISPLAY_NAME_MAPPINGS = {"SodaDFlowSource": "Soda · DFlow 素材入口",
                            "SodaDFlowWriteback": "Soda · 回写 DFlow 原卡片"}
 
 
-def local_thumbnail(image_path):
-    from .unified import local_image_path
-    with Image.open(local_image_path(image_path)) as original:
+def preview_bytes(source, full=False):
+    with Image.open(source) as original:
         image = ImageOps.exif_transpose(original).convert("RGB")
-        image.thumbnail((320, 320))
+        if not full:
+            image.thumbnail((320, 320))
         output = io.BytesIO()
-        image.save(output, format="JPEG", quality=80)
+        image.save(output, format="JPEG", quality=95 if full else 80)
     return output.getvalue()
+
+
+def local_thumbnail(image_path, full=False):
+    from .unified import local_image_path
+    return preview_bytes(local_image_path(image_path), full)
 
 
 def register_routes():
@@ -201,7 +206,7 @@ def register_routes():
     @PromptServer.instance.routes.get("/soda/materials/local/image")
     async def local_image(request):
         try:
-            data = await asyncio.to_thread(local_thumbnail, request.query.get("image_path", ""))
+            data = await asyncio.to_thread(local_thumbnail, request.query.get("image_path", ""), request.query.get("full") == "1")
             return web.Response(body=data, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
         except (OSError, ValueError, Image.DecompressionBombError):
             return web.Response(status=400)
@@ -222,14 +227,9 @@ def register_routes():
             if not card["image_path"]:
                 return web.Response(status=404)
             data = await dflow_request(port, card["image_path"], binary=True)
-            # Browser previews are bounded thumbnails; node execution reads the original cache.
-            with Image.open(io.BytesIO(data)) as im:
-                im = ImageOps.exif_transpose(im).convert("RGB")
-                im.thumbnail((320, 320))
-                output = io.BytesIO()
-                im.save(output, format="JPEG", quality=80)
-            return web.Response(body=output.getvalue(), content_type="image/jpeg")
-        except (ValueError, RuntimeError):
+            data = await asyncio.to_thread(preview_bytes, io.BytesIO(data), request.query.get("full") == "1")
+            return web.Response(body=data, content_type="image/jpeg")
+        except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
             return web.Response(status=400)
 
 
