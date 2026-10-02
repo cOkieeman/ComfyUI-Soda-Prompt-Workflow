@@ -13,6 +13,13 @@ LOCAL, GALLERY, DFLOW, TEXT = "本地图片 / PNG元数据", "作者画廊", "DF
 CREATE = "文字创作"
 
 
+def local_image_path(image_path):
+    if not image_path.strip():
+        raise ValueError("请上传本地图片或填写完整路径。")
+    path = Path(image_path.strip().strip('"'))
+    return path if path.is_absolute() else Path(folder_paths.get_annotated_filepath(str(path)))
+
+
 class SodaGallerySource:
     @classmethod
     def INPUT_TYPES(cls):
@@ -89,11 +96,7 @@ class SodaUnifiedSource:
             return (gallery_image, gallery_text or "", suite.dump(value), "")
         if source != LOCAL:
             raise ValueError("未知素材入口。")
-        if not image_path.strip():
-            raise ValueError("请上传本地图片或填写完整路径。")
-        path = Path(image_path.strip().strip('"'))
-        if not path.is_absolute():
-            path = Path(folder_paths.get_annotated_filepath(str(path)))
+        path = local_image_path(image_path)
         with Image.open(path) as im:
             pixels = np.asarray(ImageOps.exif_transpose(im).convert("RGB"), dtype=np.float32) / 255
         import torch

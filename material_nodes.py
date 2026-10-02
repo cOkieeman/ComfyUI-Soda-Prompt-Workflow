@@ -1,6 +1,7 @@
 """Read selected local DFlow cards and connect existing gallery outputs."""
 import io
 import json
+import asyncio
 from urllib.parse import quote
 
 import aiohttp
@@ -183,9 +184,27 @@ NODE_DISPLAY_NAME_MAPPINGS = {"SodaDFlowSource": "Soda · DFlow 素材入口",
                            "SodaDFlowWriteback": "Soda · 回写 DFlow 原卡片"}
 
 
+def local_thumbnail(image_path):
+    from .unified import local_image_path
+    with Image.open(local_image_path(image_path)) as original:
+        image = ImageOps.exif_transpose(original).convert("RGB")
+        image.thumbnail((320, 320))
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=80)
+    return output.getvalue()
+
+
 def register_routes():
     from aiohttp import web
     from server import PromptServer
+
+    @PromptServer.instance.routes.get("/soda/materials/local/image")
+    async def local_image(request):
+        try:
+            data = await asyncio.to_thread(local_thumbnail, request.query.get("image_path", ""))
+            return web.Response(body=data, content_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        except (OSError, ValueError, Image.DecompressionBombError):
+            return web.Response(status=400)
 
     @PromptServer.instance.routes.get("/soda/materials/dflow")
     async def list_cards(request):

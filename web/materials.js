@@ -34,13 +34,49 @@ function addMaterialPreview(node) {
         const key = node.widgets.find(w => w.name === "card_key")?.value;
         const port = Number(node.widgets.find(w => w.name === "port")?.value);
         const galleryMode = source?.value === "作者画廊";
-        container.hidden = !!source && source.value !== "DFlow 素材" && !galleryMode;
+        const localMode = source?.value === "本地图片 / PNG元数据";
+        container.hidden = !!source && source.value !== "DFlow 素材" && !galleryMode && !localMode;
         image.hidden = true;
+        image.onload = image.onerror = null;
         image.removeAttribute("src");
         tags.hidden = true;
         tags.value = "";
         height = container.hidden ? 0 : 44;
         if (source) node.title = `素材入口 · ${source.value}`;
+        if (localMode) {
+            const path = (node.widgets.find(w => w.name === "image_path")?.value || "").trim().replace(/^"|"$/g, "");
+            status.textContent = "尚未选择本地图片，请点击‘上传本地图片’。";
+            if (path) {
+                const normalized = path.replace(/\\/g, "/");
+                const name = normalized.split("/").pop();
+                node.title = `素材入口 · ${name.slice(0, 40)}`;
+                status.textContent = `${name} · 正在读取本地图片预览…`;
+                image.alt = name;
+                image.hidden = false;
+                height = 230;
+                image.onload = () => {
+                    if (current !== revision) return;
+                    status.textContent = `${name} · 已选本地图片；可在②读取原词或重新反推。`;
+                };
+                image.onerror = () => {
+                    if (current !== revision) return;
+                    image.hidden = true;
+                    height = 62;
+                    status.textContent = "本地图片预览读取失败，请确认路径或重新上传。完整路径预览更新后需重启 ComfyUI。";
+                    resize();
+                };
+                if (/^(?:[a-z]:\/|\/)/i.test(normalized)) {
+                    image.src = api.apiURL(`/soda/materials/local/image?image_path=${encodeURIComponent(path)}&v=${Date.now()}`);
+                } else {
+                    const annotation = normalized.match(/ \[(input|output|temp)\]$/);
+                    const relative = annotation ? normalized.slice(0, annotation.index) : normalized;
+                    const slash = relative.lastIndexOf("/");
+                    image.src = api.apiURL(`/view?filename=${encodeURIComponent(relative.slice(slash + 1))}&subfolder=${encodeURIComponent(relative.slice(0, Math.max(0, slash)))}&type=${annotation?.[1] || "input"}&preview=webp&v=${Date.now()}`);
+                }
+            }
+            resize();
+            return;
+        }
         if (galleryMode) {
             const gallery = node.getInputNode(node.inputs?.findIndex(input => input.name === "gallery_image") ?? 0);
             const promptGallery = node.getInputNode(node.inputs?.findIndex(input => input.name === "gallery_text") ?? 1);
@@ -124,7 +160,7 @@ function addMaterialPreview(node) {
         revision++;
         return removed?.apply(this, args);
     };
-    for (const name of ["source", "port", "card_key"]) {
+    for (const name of ["source", "image_path", "port", "card_key"]) {
         const input = node.widgets.find(w => w.name === name);
         if (!input) continue;
         const callback = input.callback;
@@ -305,6 +341,8 @@ app.registerExtension({
                             const data = await response.json();
                             this.widgets.find(w => w.name === "image_path").value = (data.subfolder ? data.subfolder + "/" : "") + data.name;
                             this.widgets.find(w => w.name === "source").value = "本地图片 / PNG元数据";
+                            this.sodaRefreshMaterialPreview?.();
+                            this.graph?.change?.();
                             this.setDirtyCanvas(true, true);
                         } catch (error) { app.ui.dialog.show(error.message); }
                         finally { input.remove(); }

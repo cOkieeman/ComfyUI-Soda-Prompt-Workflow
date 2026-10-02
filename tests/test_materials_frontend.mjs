@@ -5,10 +5,13 @@ import vm from "node:vm";
 
 function setup() {
     class Element {
-        constructor() { this.style = {}; this.dataset = {}; this.children = []; }
+        constructor() { this.style = {}; this.dataset = {}; this.children = []; this.events = {}; }
         append(child) { this.children.push(child); }
         removeAttribute(name) { delete this[name]; }
         setAttribute(name, value) { this[name] = value; }
+        addEventListener(name, action) { this.events[name] = action; }
+        click() { this.clicked = true; }
+        remove() { this.removed = true; }
     }
     class SourceNode {
         constructor() { this.widgets = []; this.size = [500, 800]; }
@@ -34,12 +37,13 @@ function setup() {
     }
     let extension;
     const pending = [];
-    const api = {apiURL: path => path, fetchApi: path => new Promise(resolve => pending.push({path, resolve}))};
+    const api = {apiURL: path => path, fetchApi: (path, options) => new Promise(resolve => pending.push({path, options, resolve}))};
     const app = {extensions: [{name: "Comfy.DanbooruGallery", async beforeRegisterNodeDef() {}}],
         registerExtension: value => { extension = value; }};
     const source = fs.readFileSync(new URL("../web/materials.js", import.meta.url), "utf8")
         .replace(/^import .*;\r?\n/gm, "");
-    vm.runInNewContext(source, {app, api, document: {createElement: () => new Element()}, window: {}});
+    const body = new Element();
+    vm.runInNewContext(source, {app, api, FormData: class {append() {}}, document: {body, createElement: () => new Element()}, window: {}});
     extension.beforeRegisterNodeDef(SourceNode, {name: "SodaUnifiedSource"});
     const node = new SourceNode();
     node.onNodeCreated();
@@ -55,8 +59,69 @@ function setup() {
         node.inputNodes = [gallery, gallery];
         return gallery;
     };
-    return {node, widget, container, image, status, pending, reply, addGallery};
+    return {node, widget, container, image, status, pending, reply, addGallery, body};
 }
+
+test("restored local upload displays an encoded image preview without executing the graph", async () => {
+    const view = setup();
+    view.node.onConfigure({widgets_values: ["本地图片 / PNG元数据", "素材目录/图 & 1.png", "keep prompt", 4173, "favorite:old"]});
+    assert.equal(view.container.hidden, false);
+    assert.equal(view.image.hidden, false);
+    assert.match(view.image.src, /\/view\?/);
+    const url = new URL(view.image.src, "http://localhost");
+    assert.equal(url.searchParams.get("filename"), "图 & 1.png");
+    assert.equal(url.searchParams.get("subfolder"), "素材目录");
+    assert.equal(url.searchParams.get("type"), "input");
+    assert.equal(view.widget("text").value, "keep prompt");
+    assert.equal(view.pending.length, 0);
+});
+
+test("changing or clearing a local path refreshes preview and stale image errors are ignored", async () => {
+    const view = setup();
+    view.node.onConfigure({widgets_values: ["本地图片 / PNG元数据", "old.png", "", 4173, ""]});
+    const oldError = view.image.onerror;
+    view.widget("image_path").value = "new.png";
+    view.widget("image_path").callback();
+    assert.equal(new URL(view.image.src, "http://localhost").searchParams.get("filename"), "new.png");
+    oldError();
+    assert.equal(view.image.hidden, false);
+    view.widget("image_path").value = "";
+    view.widget("image_path").callback();
+    assert.equal(view.image.src, undefined);
+    assert.equal(view.image.hidden, true);
+    assert.match(view.status.textContent, /上传/);
+});
+
+test("successful upload selects local source and immediately updates preview", async () => {
+    const view = setup();
+    view.widget("soda_upload").element.onclick();
+    const input = view.body.children[0];
+    input.files = [{name: "fixture.png"}];
+    const upload = input.onchange();
+    assert.equal(view.pending[0].path, "/upload/image");
+    view.pending[0].resolve({ok:true, json:async()=>({name:"fixture.png", subfolder:"uploaded"})});
+    await upload;
+    assert.equal(view.widget("source").value, "本地图片 / PNG元数据");
+    assert.equal(view.widget("image_path").value, "uploaded/fixture.png");
+    assert.equal(view.container.hidden, false);
+    assert.equal(view.image.hidden, false);
+    assert.equal(new URL(view.image.src, "http://localhost").searchParams.get("filename"), "fixture.png");
+    assert.equal(input.removed, true);
+});
+
+test("absolute local paths use the thumbnail bridge and missing files show a helpful message", async () => {
+    const view = setup();
+    view.node.onConfigure({widgets_values: ["本地图片 / PNG元数据", '"C:\\图片\\picture.png"', "", 4173, ""]});
+    assert.match(view.image.src, /\/soda\/materials\/local\/image\?/);
+    assert.equal(new URL(view.image.src, "http://localhost").searchParams.get("image_path"), "C:\\图片\\picture.png");
+    view.image.onerror();
+    assert.equal(view.image.hidden, true);
+    assert.match(view.status.textContent, /路径|上传/);
+    view.widget("source").value = "文字输入";
+    view.widget("source").callback();
+    assert.equal(view.container.hidden, true);
+    assert.equal(view.image.src, undefined);
+});
 
 test("old saved workflow restores inputs and selected preview without running the graph", async () => {
     const view = setup();

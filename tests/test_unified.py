@@ -1,12 +1,31 @@
 import json
 import sys
 import unittest
+import tempfile
+import io
+from pathlib import Path
+from PIL import Image
 from unittest.mock import AsyncMock, patch
 import test_workflow
 
 u = sys.modules['soda_test.unified']
 
 class UnifiedTests(unittest.IsolatedAsyncioTestCase):
+    def test_local_thumbnail_uses_source_path_resolution_and_bounded_dimensions(self):
+        material = sys.modules['soda_test.material_nodes']
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'中文 picture.png'
+            Image.new('RGB', (640, 400), (20, 90, 160)).save(path)
+            for value in (str(path), '"'+str(path)+'"'):
+                image = Image.open(io.BytesIO(material.local_thumbnail(value)))
+                self.assertEqual(image.size, (320, 200))
+                self.assertEqual(image.format, 'JPEG')
+            with patch.object(u.folder_paths, 'get_annotated_filepath', return_value=str(path), create=True) as resolve:
+                material.local_thumbnail('uploaded/picture.png')
+                resolve.assert_called_once()
+            for value in ('', str(Path(directory)/'missing.png')):
+                with self.assertRaises((ValueError, OSError)): material.local_thumbnail(value)
+
     def test_only_gallery_requests_gallery(self):
         node=u.SodaUnifiedSource()
         for source in (u.LOCAL,u.DFLOW,u.TEXT):
