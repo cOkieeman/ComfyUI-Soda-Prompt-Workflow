@@ -19,6 +19,7 @@ _lock = threading.RLock()
 
 
 def canonical(tag):
+    tag = tag.replace(r"\(", "(").replace(r"\)", ")")
     return re.sub(r"\s+", "_", tag.strip().lower())
 
 

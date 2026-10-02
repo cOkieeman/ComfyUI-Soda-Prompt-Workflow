@@ -114,6 +114,10 @@ class TagToolsTests(unittest.TestCase):
         with patch.object(tools, 'catalog', return_value={'odd_name': 'general'}):
             self.assertEqual(tools.classify(['odd_name'])['unknown'], ['odd_name'])
 
+    def test_gallery_bracket_escaping_does_not_hide_character_category(self):
+        result=tools.classify([r'named character \(series\)'], {'named_character_(series)':'character'})
+        self.assertEqual(result['character'],['named_character_(series)'])
+
     def test_failed_gallery_download_does_not_attach_wrong_picture_metadata(self):
         import types
         gallery = types.SimpleNamespace(get_selected_data=lambda **kwargs: (['image'], ['second_prompt']))
