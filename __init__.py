@@ -29,5 +29,7 @@ else:
     register_routes()
     from .tag_routes import register_routes as register_tag_routes
     register_tag_routes()
+    from .local_vlm import register_routes as register_vlm_routes
+    register_vlm_routes()
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

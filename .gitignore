@@ -6,6 +6,8 @@ ai_services.json
 ai_services.tmp
 tag_tools.json
 tag_tools.tmp
+local_vlm.json
+local_vlm.tmp
 .venv/
 .pytest_cache/
 .ruff_cache/

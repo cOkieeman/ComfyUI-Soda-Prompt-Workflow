@@ -36,31 +36,46 @@ def display(prompt, detail):
 
 
 class SodaReferenceSuite:
-    IS_CHANGED = classmethod(providers.changed)
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        from .local_vlm import changed
+        return changed(cls, **kwargs)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"image": ("IMAGE",),
-                             "route": ([suite.PIXEL, suite.ANIMA, suite.DFLOW],),
+                             "route": ([suite.PIXEL, suite.ANIMA, suite.DFLOW, suite.LOCAL_QWEN],),
                              "image_index": ("INT", {"default": 0, "min": 0}),
                              "max_side": ("INT", {"default": 1600, "min": 0, "max": 8192}),
                              **controls()},
                 "optional": {"user_prompt": ("STRING", {"default": "", "multiline": True,
-                    "tooltip": "仅阿丹路线使用。留空纯反推、默认英文；中文附加要求会按原规则输出中文。填写修改要求将执行图文融合。"})}}
+                    "tooltip": "阿丹或本地 Qwen 路线可填写修改要求。留空忠实反推；本地 Qwen 返回候选标签和英文短描述。"})}}
 
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("faithful_prompt", "record_json")
     FUNCTION = "run"
     CATEGORY = "Soda/Full Prompt Suite"
-    DESCRIPTION = "阿丹原文直接交 Flash 看图；另可选 WD + Flash 复核或 DFlow 忠实观察。阿丹路线不先打标、不改写原规则。"
+    DESCRIPTION = "选择远程看图或独立进程运行本地 Qwen3.5。候选标签可继续分类整理并适配目标绘图模型。"
 
     async def run(self, image, route, image_index, max_side, refresh, timeout_seconds, user_prompt=""):
         if not 0 <= image_index < len(image):
             raise ValueError("image_index 超出批次。")
         pixels = image[image_index].detach().cpu().numpy()
         data_url, image_info = core.encode_image(pixels, max_side)
-        if user_prompt.strip() and route != suite.PIXEL:
-            raise ValueError("附加要求仅用于阿丹像素级描述路线；其他路线请留空。")
-        if route == suite.PIXEL:
+        if user_prompt.strip() and route not in (suite.PIXEL, suite.LOCAL_QWEN):
+            raise ValueError("附加要求仅用于阿丹或本地 Qwen 路线；其他路线请留空。")
+        if route == suite.LOCAL_QWEN:
+            from .local_vlm import observe
+            response, runtime = await observe(data_url, user_prompt.strip(), refresh, timeout_seconds)
+            tag_text = ", ".join(response["tags"])
+            prompt = tag_text + "\n\n" + response["nl"]
+            result = record("local_qwen35_reverse", source=image_info, local_runtime=runtime,
+                user_prompt=user_prompt, observation={"description": response["nl"], "uncertainties": response["uncertainties"]},
+                faithful_prompt=prompt, selected_prompt=prompt, tags=response["tags"], api_calls=0,
+                prompt_parts={"text": prompt, "tags": tag_text, "nl": response["nl"]},
+                validation={"passed": True, "problems": [], "scope": "local_vlm_schema",
+                    "warnings": runtime.get("warnings", []) + ["本地 Qwen 标签是看图候选，未经 WD 逐项核验；请对照图片检查。"],
+                    "visual_accuracy": "not guaranteed"})
+        elif route == suite.PIXEL:
             rule = read_preset("adan_pixel.txt")
             rule_hash = hashlib.sha256(rule.encode("utf-8")).hexdigest()
             messages = [{"role": "system", "content": rule}, suite.visual_message(

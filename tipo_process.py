@@ -14,7 +14,7 @@ def check_interrupted():
     comfy.model_management.throw_exception_if_processing_interrupted()
 
 
-async def execute_worker(request, timeout_seconds, check=check_interrupted, worker_path=None):
+async def execute_worker(request, timeout_seconds, check=check_interrupted, worker_path=None, task_name="TIPO"):
     check()
     worker_path = worker_path or Path(__file__).with_name('tipo_worker.py')
     with tempfile.TemporaryDirectory(prefix='soda-tipo-') as temporary:
@@ -29,14 +29,16 @@ async def execute_worker(request, timeout_seconds, check=check_interrupted, work
             while process.poll() is None:
                 check()
                 if time.monotonic() >= deadline:
-                    raise TimeoutError('TIPO 本地扩写超时，推理进程已停止；未保存缓存。')
+                    action = "本地扩写" if task_name == "TIPO" else "本地任务"
+                    raise TimeoutError(f'{task_name} {action}超时，推理进程已停止；未保存缓存。')
                 await asyncio.sleep(min(0.1, max(0.001, deadline - time.monotonic())))
             check()
             if process.returncode != 0 or not result_path.is_file():
-                raise RuntimeError('TIPO 推理进程异常退出；请检查依赖和模型。')
+                raise RuntimeError(f'{task_name} 推理进程异常退出；请检查依赖和模型。')
             result = json.loads(result_path.read_text(encoding='utf-8'))
             if 'error' in result:
-                raise RuntimeError('TIPO 扩写失败：' + result['error'])
+                action = "扩写失败" if task_name == "TIPO" else "失败"
+                raise RuntimeError(f'{task_name} {action}：' + result['error'])
             return result['result']
         finally:
             if process.poll() is None:

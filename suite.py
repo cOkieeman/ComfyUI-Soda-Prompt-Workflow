@@ -10,6 +10,7 @@ VERSION = "2.0"
 ANIMA = "Anima · WD + Flash"
 PIXEL = "阿丹 · 像素级描述（原文）"
 DFLOW = "DFlow · 忠实观察"
+LOCAL_QWEN = "Qwen3.5 · 本地看图反推"
 K2 = "K2 · 七层英文扩写"
 DFLOW_EXPAND = "DFlow · 通用中文扩写（适配）"
 

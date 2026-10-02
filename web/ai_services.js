@@ -23,7 +23,7 @@ async function openSettings() {
         return element;
     };
     add("h2", "AI 服务配置");
-    add("p", "所有 Soda 反推、改写、扩写与最终适配共用当前服务。保存多套配置后，用下拉框切换并启用。TIPO 本地推理不受影响。");
+    add("p", "远程反推、改写、扩写与最终适配共用当前服务。保存多套配置后，用下拉框切换并启用。本地 Qwen 看图和 TIPO 不受影响；⑤最终适配开启时仍调用此服务。");
     const field = (name, type = "text") => {
         const label = add("label", name);
         label.style.cssText = "display:block;margin:10px 0 4px";

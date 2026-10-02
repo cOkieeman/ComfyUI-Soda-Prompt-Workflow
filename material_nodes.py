@@ -93,12 +93,15 @@ class SodaDFlowSource:
 
 
 class SodaMaterialPrompt:
-    IS_CHANGED = classmethod(providers.changed)
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        from .local_vlm import changed
+        return changed(cls, **kwargs)
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
             "action": (["使用素材原提示词", "重新反推"],),
-            "route": ([suite.PIXEL, suite.ANIMA, suite.DFLOW],),
+            "route": ([suite.PIXEL, suite.ANIMA, suite.DFLOW, suite.LOCAL_QWEN],),
             "user_prompt": ("STRING", {"default": "", "multiline": True}),
             "use_card_instruction": ("BOOLEAN", {"default": True}),
             **controls(),
@@ -132,8 +135,8 @@ class SodaMaterialPrompt:
             raise ValueError("素材没有可读取的图片，请在画廊选图或等待 DFlow 高清缓存完成。")
         extra = source.get("metadata", {}).get("customInstruction", "") if use_card_instruction else ""
         instruction = "\n".join(x for x in (extra, user_prompt) if x.strip())
-        if instruction and route != suite.PIXEL:
-            raise ValueError("图文修改要求仅适用于阿丹路线；其他路线请关闭卡片附加要求并清空输入。")
+        if instruction and route not in (suite.PIXEL, suite.LOCAL_QWEN):
+            raise ValueError("图文修改要求仅适用于阿丹或本地 Qwen 路线；其他路线请关闭卡片附加要求并清空输入。")
         prompt, raw = await SodaReferenceSuite().run(source_image, route, 0, 1600, refresh, timeout_seconds, instruction)
         value = core.parse_json(raw)
         value["source_material"] = source

@@ -31,7 +31,7 @@ PNG 的 A1111 parameters 优先。ComfyUI 图仅在已支持采样器直接连�
 
 ## 模型、密钥和预设
 
-①和⑤底部的 **AI 服务配置 / 切换模型** 是统一入口。可保存 DeepSeek、GLM/智谱、Gemini 和自定义 OpenAI 兼容服务配置；填写 Base URL、文字模型、看图模型和 API Key，点击“保存并启用当前服务”。以后选另一套配置并启用即可，所有反推、文字创作、OC、远程扩写和最终适配共用当前服务。默认仍为原来的 DeepSeek Flash，兼容现有 secrets.toml 或 DEEPSEEK_API_KEY，无需重填。GLM/Gemini 的模型名称按账号实际可用型号填写；看图必须选择支持图片输入的模型。详见 [AI-SERVICES.md](AI-SERVICES.md)。
+①和⑤底部的 **AI 服务配置 / 切换模型** 是统一入口。可保存 DeepSeek、GLM/智谱、Gemini 和自定义 OpenAI 兼容服务配置；填写 Base URL、文字模型、看图模型和 API Key，点击“保存并启用当前服务”。以后选另一套配置并启用即可，所有远程反推、文字创作、OC、远程扩写和最终适配共用当前服务。默认仍为原来的 DeepSeek Flash，兼容现有 secrets.toml 或 DEEPSEEK_API_KEY，无需重填。GLM/Gemini 的模型名称按账号实际可用型号填写；看图必须选择支持图片输入的模型。详见 [AI-SERVICES.md](AI-SERVICES.md)。
 
 密钥存入 ComfyUI/user/soda_prompt_workflow/ai_services.json，只在本机保存；读取接口仅返回“是否已配置”，不返回密钥，工作流和记录也不包含密钥。地址不变时 API Key 留空保留旧值；换地址需重填，避免把原服务密钥发到另一地址。保存配置不触发 AI 请求。TIPO 仍完全本地，见 [TIPO-UPDATE.md](TIPO-UPDATE.md)。节点选项中的“Flash”字样是保留的路线名称，实际请求使用统一配置。
 
@@ -68,3 +68,7 @@ python tests/run_tests.py
 # 标签整理
 
 新工作台在②与③之间增加分类标签按钮，可取舍画师、角色、作品、服装等类别、保存未知标签映射，并可使用已下载的BGE-M3资源进行本地中文标签搜索。[使用方法与资源目录](TAG-TOOLS.md)。
+
+## 本地看图反推
+
+②可选Qwen3.5本地路线，输出候选标签与英文短描述，继续接②a分类和⑤三模型适配。下方按钮配置主模型、对应投影和独立运行库。②本地看图不调用API；⑤适配开启时仍使用当前文字服务。[使用方法与模型配置](LOCAL-QWEN.md)。

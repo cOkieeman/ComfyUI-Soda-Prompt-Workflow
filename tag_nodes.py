@@ -53,7 +53,9 @@ def organise(source_prompt, source, enabled, include_categories, category_edits)
         tag_organisation={"original_tags": original, "input_tags": tags, "groups": groups,
             "included_categories": selected, "category_edits": edits, "excluded_tags": excluded,
             "added_tags": added, "mapping_fingerprint": tools.fingerprint()},
-        validation={"passed": True, "problems": [], "warnings": [warning] if warning else []})
+        validation={**source.get("validation", {}), "passed": source.get("validation", {}).get("passed", True),
+            "problems": list(source.get("validation", {}).get("problems", [])),
+            "warnings": list(source.get("validation", {}).get("warnings", [])) + ([warning] if warning else [])})
     preview.update(message=warning or preview["message"], selected_tags=retained)
     return prompt, value, preview
 
