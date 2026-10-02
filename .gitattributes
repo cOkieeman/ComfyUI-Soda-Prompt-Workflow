@@ -1,0 +1,2 @@
+* text=auto eol=lf
+vendor/anima_tagger/models/t5_tokenizer/tokenizer.json -text

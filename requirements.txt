@@ -1,0 +1,5 @@
+aiohttp
+numpy
+Pillow
+onnxruntime>=1.20
+tokenizers>=0.20

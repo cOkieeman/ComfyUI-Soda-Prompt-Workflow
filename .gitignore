@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.env
+secrets.toml
+.venv/
+.pytest_cache/
+.ruff_cache/
+presets/adan_pixel.txt
+presets/author_oc.txt
+*.gguf
+*.onnx
+*.safetensors
+output/
+user/
+*.log
+
+.soda-prepared

@@ -1,0 +1,820 @@
+{
+  "last_node_id": 14,
+  "last_link_id": 19,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "SodaUnifiedSource",
+      "title": "① 素材入口：本地图 / 画廊 / DFlow / 文字",
+      "pos": [
+        20,
+        70
+      ],
+      "size": [
+        500,
+        650
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "gallery_image",
+          "type": "IMAGE",
+          "link": 17
+        },
+        {
+          "name": "gallery_text",
+          "type": "STRING",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "original_prompt",
+          "type": "STRING",
+          "links": [
+            2,
+            11
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "links": [
+            3,
+            15
+          ],
+          "slot_index": 2
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": [
+            16
+          ],
+          "slot_index": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaUnifiedSource"
+      },
+      "widgets_values": [
+        "文字输入",
+        "",
+        "",
+        4173,
+        ""
+      ]
+    },
+    {
+      "id": 2,
+      "type": "SodaUnifiedProcess",
+      "title": "② 处理开关：原词 / 反推 / 文字创作",
+      "pos": [
+        570,
+        70
+      ],
+      "size": [
+        360,
+        460
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source_image",
+          "type": "IMAGE",
+          "link": 1
+        },
+        {
+          "name": "source_text",
+          "type": "STRING",
+          "link": 2
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "selected_prompt",
+          "type": "STRING",
+          "links": [
+            4,
+            12
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "record_json",
+          "type": "STRING",
+          "links": [
+            5
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "all_variants",
+          "type": "STRING",
+          "links": [
+            19
+          ],
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaUnifiedProcess"
+      },
+      "widgets_values": [
+        "使用素材原提示词",
+        "阿丹 · 像素级描述（原文）",
+        "",
+        true,
+        0,
+        180,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "type": "SodaPromptStages",
+      "title": "③ 固定前后缀 / OC 特征替换",
+      "pos": [
+        970,
+        70
+      ],
+      "size": [
+        380,
+        580
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source_prompt",
+          "type": "STRING",
+          "link": 4
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "selected_prompt",
+          "type": "STRING",
+          "links": [
+            6
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "record_json",
+          "type": "STRING",
+          "links": [
+            7
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaPromptStages"
+      },
+      "widgets_values": [
+        "",
+        "",
+        false,
+        "",
+        "发型、发色、眼睛、服装、配饰",
+        0,
+        180
+      ]
+    },
+    {
+      "id": 4,
+      "type": "SodaExpansionChoice",
+      "title": "④ 扩写选择：关闭 / TIPO / Flash",
+      "pos": [
+        1390,
+        70
+      ],
+      "size": [
+        490,
+        720
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source_text",
+          "type": "STRING",
+          "link": 6,
+          "widget": {
+            "name": "source_text"
+          }
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "selected_prompt",
+          "type": "STRING",
+          "links": [
+            8
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "record_json",
+          "type": "STRING",
+          "links": [
+            9
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaExpansionChoice"
+      },
+      "widgets_values": [
+        "",
+        "关闭",
+        "保留主体、服装、姿态和构图，只细化可见内容。",
+        "自动（优先读取记录中的标签）",
+        "保留原标签＋扩写描述",
+        "TIPO v2.1 · FP16",
+        "cuda",
+        1234,
+        "short",
+        0.5,
+        896,
+        1152,
+        "",
+        0,
+        180
+      ]
+    },
+    {
+      "id": 5,
+      "type": "SodaPromptOutput",
+      "title": "⑤ 预览修订 → 接自己的生图文本输入",
+      "pos": [
+        1970,
+        70
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source_prompt",
+          "type": "STRING",
+          "link": 8
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "links": [
+            10,
+            14
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "record_json",
+          "type": "STRING",
+          "links": [
+            13
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaPromptOutput"
+      },
+      "widgets_values": [
+        false,
+        "",
+        "Krea2"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "ShowText|pysssss",
+      "title": "最终提示词",
+      "pos": [
+        2390,
+        70
+      ],
+      "size": [
+        400,
+        340
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "ShowText|pysssss",
+      "title": "素材原提示词 / 对照",
+      "pos": [
+        570,
+        650
+      ],
+      "size": [
+        400,
+        340
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "ShowText|pysssss",
+      "title": "反推或选用原稿",
+      "pos": [
+        970,
+        700
+      ],
+      "size": [
+        400,
+        340
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 9,
+      "type": "SodaSuiteRecord",
+      "title": "完整记录与最终稿保存",
+      "pos": [
+        1970,
+        470
+      ],
+      "size": [
+        380,
+        210
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "record_json",
+          "type": "STRING",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaSuiteRecord"
+      },
+      "widgets_values": [
+        true
+      ]
+    },
+    {
+      "id": 10,
+      "type": "SodaUnifiedWriteback",
+      "title": "⑥ 回写原卡片 / 预览满意后开启",
+      "pos": [
+        2390,
+        470
+      ],
+      "size": [
+        400,
+        210
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 14
+        },
+        {
+          "name": "source_record",
+          "type": "STRING",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaUnifiedWriteback"
+      },
+      "widgets_values": [
+        false
+      ]
+    },
+    {
+      "id": 11,
+      "type": "ShowText|pysssss",
+      "title": "原素材负面提示词 / 可接自己的负面输入",
+      "pos": [
+        1390,
+        870
+      ],
+      "size": [
+        400,
+        340
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 12,
+      "type": "Note",
+      "title": "使用说明",
+      "pos": [
+        570,
+        1540
+      ],
+      "size": [
+        1500,
+        300
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "只用这一份工作台：①素材入口，②原词/反推/文字创作，③前后缀/OC，④扩写方式，⑤目标与手动修订。\n④一次只执行选中的方式：关闭 / TIPO本地 / Flash K2 / Flash DFlow。默认关闭。TIPO不看图、不调用Flash。\nTIPO自动输入只读取匹配记录中的标签；普通文本按自然语言处理。粘贴标签请选择‘标签’，混合稿请选择‘标签＋描述’，首段放标签，其后放描述。\nTIPO默认保留原标签并扩写描述；也可选生成标签＋描述或仅描述。requirements只用于Flash，TIPO场景要求写入上游文本。宽高请与实际出图一致。\nTIPO固定种子便于对照；改种子生成另一稿，相同输入使用缓存。原稿、扩写、模型、参数和种子进入完整记录。\nFlash反推/OC/创作仍按所选开关调用官方deepseek-flash。DFlow回写默认关闭。\n最终positive_prompt接自己的正向文本编码。Anima/Krea2选择控制输出检查，不会自动转换提示词。不同页签不能跨页连线，请复制模块到自己的生图流。"
+      ]
+    },
+    {
+      "id": 13,
+      "type": "SodaGallerySource",
+      "title": "作者原生画廊 · ①选择此入口后才执行",
+      "pos": [
+        20,
+        800
+      ],
+      "size": [
+        500,
+        600
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            17
+          ],
+          "slot_index": 0,
+          "shape": 6
+        },
+        {
+          "name": "prompts",
+          "type": "STRING",
+          "links": [
+            18
+          ],
+          "slot_index": 1,
+          "shape": 6
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SodaGallerySource"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 14,
+      "type": "ShowText|pysssss",
+      "title": "文字创作全部方案 · 在②用variant_index选择",
+      "pos": [
+        570,
+        1040
+      ],
+      "size": [
+        800,
+        340
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      1,
+      "STRING"
+    ],
+    [
+      3,
+      1,
+      2,
+      2,
+      2,
+      "STRING"
+    ],
+    [
+      4,
+      2,
+      0,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      5,
+      2,
+      1,
+      3,
+      1,
+      "STRING"
+    ],
+    [
+      6,
+      3,
+      0,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      7,
+      3,
+      1,
+      4,
+      1,
+      "STRING"
+    ],
+    [
+      8,
+      4,
+      0,
+      5,
+      0,
+      "STRING"
+    ],
+    [
+      9,
+      4,
+      1,
+      5,
+      1,
+      "STRING"
+    ],
+    [
+      10,
+      5,
+      0,
+      6,
+      0,
+      "STRING"
+    ],
+    [
+      11,
+      1,
+      1,
+      7,
+      0,
+      "STRING"
+    ],
+    [
+      12,
+      2,
+      0,
+      8,
+      0,
+      "STRING"
+    ],
+    [
+      13,
+      5,
+      1,
+      9,
+      0,
+      "STRING"
+    ],
+    [
+      14,
+      5,
+      0,
+      10,
+      0,
+      "STRING"
+    ],
+    [
+      15,
+      1,
+      2,
+      10,
+      1,
+      "STRING"
+    ],
+    [
+      16,
+      1,
+      3,
+      11,
+      0,
+      "STRING"
+    ],
+    [
+      17,
+      13,
+      0,
+      1,
+      0,
+      "IMAGE"
+    ],
+    [
+      18,
+      13,
+      1,
+      1,
+      1,
+      "STRING"
+    ],
+    [
+      19,
+      2,
+      2,
+      14,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.55,
+      "offset": [
+        100,
+        150
+      ]
+    }
+  },
+  "version": 0.4,
+  "revision": 1
+}
