@@ -24,7 +24,7 @@ Windows portable 用户把 python 换成 python_embeded/python.exe 的实际路�
 2. **② 处理方式**：原提示词、重新反推或文字创作。没有原词需手动选反推，不会自动调用付费接口。创作用 variant_index 选稿。
 3. **③ 前后缀 / OC**：本地拼接前后缀；OC 替换需开关和设定。前后缀保留已识别标签的结构记录，OC 改写后不复用可能过时的标签。
 4. **④ 扩写选择**：关闭、TIPO、K2 七层英文或 DFlow 中文。默认关闭，一次只执行选中的路线。
-5. **⑤ 预览修订**：Anima / Krea2，或手动稿。Anima 用真实 T5 tokenizer 检查512 token兼容预算，不自动截断。目标不会自动切换上游规则。
+5. **⑤ 目标适配**：点击 **Anima / Krea2 / Qwen 2.1** 快捷按钮，再运行工作流，最终只输出所选模型的提示词。Anima 是标签＋英文短描述，Krea2 是英文自然语言，Qwen2.1 是中文自然语言。首次适配用 Flash，相同输入和目标复用缓存；不改上游反推与扩写规则。手动输入也可适配；关闭 adapt_to_target 后原样输出。Anima 的512 token是可调整的长度偏好，0表示不限制，超预算不截断。
 6. **输出与归档**：正负面分别输出。归档默认开启，DFlow 回写默认关闭。不同页签不能跨页连线，需复制模块进入生图流或复制最终文本。
 
 PNG 的 A1111 parameters 优先。ComfyUI 图仅在已支持采样器直接连接字面文本编码节点、且各采样器结果一致时提取正负面词。复杂连接或多套不同词保留清单和警告，返回空原词，不把负面词拼进正面词。
@@ -52,7 +52,7 @@ Anima WD + Flash 的逐标签核验决定是标签保留依据。槽位漏词、
 
 TIPO 使用一次性独立进程，超时或取消时终止，结束后释放进程持有的显存。每个 ComfyUI 事件循环一次只启动一个 TIPO 进程，等待计入超时，模型启动有额外开销。
 
-归档在 ComfyUI/output/soda_prompt_workflow，保留来源、原稿、扩写、手动稿和参数。格式校验不保证视觉准确性，请在第⑤步核对人物、服装、动作和场景。
+归档在 ComfyUI/output/soda_prompt_workflow，保留来源、原稿、扩写、手动稿、最终适配稿与省略说明。不同模型各自缓存，切换目标不必重做反推；改变⑤的 refresh 才重做该目标适配。格式校验不保证视觉准确性，请核对人物、服装、动作和场景。规则依据与范围见 [MODEL-PROMPTS.md](MODEL-PROMPTS.md)。
 
 ## 开发
 
@@ -60,6 +60,6 @@ TIPO 使用一次性独立进程，超时或取消时终止，结束后释放进
 python tests/run_tests.py
 ```
 
-前端预览回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs`，不需要安装 npm 依赖。
+前端预览与快捷按钮回归测试另用 Node.js 运行：`node --test tests/test_materials_frontend.mjs tests/test_target_frontend.mjs`，不需要安装 npm 依赖。
 
 离线测试不读取真实密钥、不调用付费API、不下载模型。自动测试配置在 `.github/workflow-templates/offline-tests.yml`，使用 CPU PyTorch；当前发布凭据缺少 workflow 权限，模板尚未启用。具有相应权限后将它复制到 `.github/workflows/tests.yml` 可启用。验证边界见 [VERIFICATION.md](VERIFICATION.md)。自建代码采用 MIT，第三方资产见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [SOURCES.md](SOURCES.md)。

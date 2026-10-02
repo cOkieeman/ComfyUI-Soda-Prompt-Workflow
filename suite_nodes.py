@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import folder_paths
 
-from . import core, local_pipeline as local, suite
+from . import core, local_pipeline as local, suite, target_prompt as target_adapter
 from .nodes import key_path
 from .preset_config import read_preset
 
@@ -180,21 +180,32 @@ class SodaPromptOutput:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
-            "source_prompt": ("STRING", {"forceInput": True}),
+            "source_prompt": ("STRING", {"forceInput": True, "lazy": True}),
             "use_edited": ("BOOLEAN", {"default": False}),
             "edited_prompt": ("STRING", {"multiline": True, "default": ""}),
-            "target": (["Anima", "Krea2"],),
-        }, "optional": {"source_record": ("STRING", {"forceInput": True})}}
+            "target": (target_adapter.TARGETS,),
+        }, "optional": {"source_record": ("STRING", {"forceInput": True, "lazy": True}),
+            "adapt_to_target": ("BOOLEAN", {"default": True, "tooltip": "将选中的原稿或手动输入适配到目标模型。首次用 Flash；相同输入/目标复用缓存。关闭后原样输出。"}),
+            **controls(),
+            "anima_token_budget": ("INT", {"default": 512, "min": 0, "max": 8192,
+                "tooltip": "Anima 输出长度偏好，0表示不限制；不是模型硬上限。"})}}
 
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("positive_prompt", "record_json")
     FUNCTION = "run"
     CATEGORY = "Soda/Full Prompt Suite"
-    DESCRIPTION = "本地选用反推稿或手动修订稿。positive_prompt 接你自己的正面文本编码节点；此节点不调用 API。"
+    DESCRIPTION = "三个快捷按钮选择最终模型。适配开启时将原稿/手动输入整理为所选模型的提示词，相同输入缓存；positive_prompt 接生图正面文本输入。"
 
-    def run(self, source_prompt, use_edited, edited_prompt, target, source_record=""):
-        if target not in ("Anima", "Krea2"):
+    def check_lazy_status(self, use_edited, source_prompt=None, source_record="", **kwargs):
+        if use_edited:
+            return []
+        return [name for name, value in (("source_prompt", source_prompt), ("source_record", source_record)) if value is None]
+
+    async def run(self, source_prompt, use_edited, edited_prompt, target, source_record="",
+                  adapt_to_target=True, refresh=0, timeout_seconds=180, anima_token_budget=512):
+        if target not in target_adapter.TARGETS:
             raise ValueError("未知目标模型。")
+        source_prompt = source_prompt or ""
         prompt = edited_prompt.strip() if use_edited else source_prompt
         if not prompt.strip():
             raise ValueError("输出为空：请先反推，或填写手动修订稿。")
@@ -204,16 +215,42 @@ class SodaPromptOutput:
             "passed": True, "problems": [], "warnings": ["手动稿或独立输入未做槽位校验，请对照图片检查。"]}
         validation["warnings"] = list(validation.get("warnings", []))
         validation["problems"] = list(validation.get("problems", []))
-        if target == "Anima":
+        adaptation_input = prompt
+        api, response, tags = None, None, []
+        adapted = False
+        already_adapted = (matches and not use_edited and source.get("adapted") is True
+                           and source.get("target") == target and source.get("target_profile_version") == target_adapter.VERSION
+                           and source.get("validation", {}).get("passed") is True
+                           and (target != "Anima" or source["validation"].get("budget") == anima_token_budget))
+        if adapt_to_target and not already_adapted:
+            response, api = await call("target_prompt_v1:" + target,
+                target_adapter.messages(target, prompt, source if matches and not use_edited else {}, anima_token_budget),
+                refresh, timeout_seconds, 4000)
+            prompt, validation, tags = target_adapter.validate(target, response, anima_token_budget)
+            adapted = True
+        elif already_adapted:
+            adapted = True
+            tags = source.get("tags", [])
+        else:
+            validation["warnings"].append("目标适配关闭，当前输出为所选原稿；未自动转换模型格式。")
+        if target == "Anima" and not adapted:
             tokens, _ = local.token_count(prompt)
             validation["tokens"] = tokens
-            if tokens > 512:
+            if anima_token_budget and tokens > anima_token_budget:
                 validation["passed"] = False
-                validation["problems"].append("Anima 输出超过本工作流 512 token 预算；未截断，请手动精简。")
+                validation["problems"].append(f"Anima 输出超过所选 {anima_token_budget} token 预算；未截断，请手动精简。")
         result = record("prompt_output", target=target, edited=use_edited,
                         source_record=source, source_prompt=source_prompt,
-                        faithful_prompt=source.get("faithful_prompt", source_prompt) if matches else source_prompt,
-                        selected_prompt=prompt, validation=validation, api_calls=0)
+                        faithful_prompt=source.get("faithful_prompt", source_prompt) if matches else adaptation_input,
+                        selected_prompt=prompt, validation=validation,
+                        adaptation_input=adaptation_input, adapted=adapted,
+                        target_profile_version=target_adapter.VERSION, api=api,
+                        api_calls=1 if api and not api.get("cache_hit") else 0)
+        if tags:
+            result["tags"] = tags
+        if response is not None:
+            result["target_response"] = response
+            result["omissions"] = response["omissions"]
         if matches and source.get("expanded_prompt"):
             result["expanded_prompt"] = source["expanded_prompt"]
         return (prompt, suite.dump(result))
@@ -298,7 +335,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SodaReferenceSuite": "Soda · 完整反推 / 来源切换",
     "SodaTextSuite": "Soda · Anima 文字创作",
     "SodaExpandSuite": "Soda · K2 / DFlow 扩写开关",
-    "SodaPromptOutput": "Soda · 提示词预览输出 / 手动修订",
+    "SodaPromptOutput": "Soda · 目标适配 / 提示词输出",
     "SodaVariant": "Soda · 选择创作方案",
     "SodaMetadata": "Soda · 本地读取原图提示词",
     "SodaSuiteRecord": "Soda · 校验状态与完整归档",
