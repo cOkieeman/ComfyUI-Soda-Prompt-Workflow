@@ -21,7 +21,7 @@
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | 使用 Google 的 OpenAI 兼容接口，填写可用 Gemini 型号 |
 | 自定义 | 自行填写 | 服务必须支持 Chat Completions；反推还需支持 `image_url` 内联图片 |
 
-也可直接填写完整 `/chat/completions` 地址，不会重复追加路径。远程地址使用 HTTPS，本机兼容服务支持 HTTP。
+也可直接填写完整 `/chat/completions` 地址，不会重复追加路径。公网地址使用 HTTPS；本机和局域网 IP 地址支持 HTTP，包括 `10.*`、`172.16.*` 至 `172.31.*`、`192.168.*` 和 IPv6 ULA。服务在另一台电脑上时，填写那台电脑的 IP 和 API 路径，例如 `http://192.168.1.5:8045/v1`；`127.0.0.1` 指向运行 ComfyUI 的本机。
 
 地址依据：[DeepSeek 官方示例](https://api-docs.deepseek.com/api_samples/chat_curl/)、[智谱官方 SDK](https://github.com/zai-org/z-ai-sdk-python/blob/main/README_CN.md)、[Gemini 官方兼容接口](https://ai.google.dev/gemini-api/docs/openai)。此入口处理文字生成和图片理解，不调用图像生成接口；不支持原生 Anthropic Messages 或 Gemini generateContent 地址。
 
@@ -33,4 +33,4 @@ API Key 留空在地址不变时保留；换地址需重新填写。开启“严
 
 服务地址、型号和当前配置变化会更新相关节点的执行缓存，并区分持久响应缓存。原默认 Flash 缓存仍可用。失败或输出被截断时没有自动重试；确认后改变 refresh 才重新调用。TIPO、原词读取、本地前后缀和关闭的分支不请求 AI。
 
-拉取与测试功能已用本机模拟兼容 API 验证实际 HTTP 请求，并在隔离浏览器宿主检查原始弹窗。此新增功能未在完整 ComfyUI 宿主运行，也未使用真实 DeepSeek/GLM/Gemini 密钥测试；无法保证任意型号、网关或账户权限均兼容。更新后需重启 ComfyUI 并刷新网页。
+拉取与测试功能已用本机模拟兼容 API 验证实际 HTTP 请求，并在隔离浏览器宿主检查原始弹窗。模型拉取另已在真实 ComfyUI 中连接另一台电脑的局域网兼容 API，成功显示36个模型。真实云端的文字/图片生成尚未测试，无法保证任意型号、网关或账户权限均兼容。更新后需重启 ComfyUI 并刷新网页。
