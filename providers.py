@@ -3,6 +3,7 @@ import hashlib
 import asyncio
 import base64
 import io
+import ipaddress
 import json
 import os
 import time
@@ -19,6 +20,8 @@ PRESETS = {
     "custom": {"name": "自定义兼容服务", "base_url": "", "text_model": "",
         "vision_model": "", "strict_model": False},
 }
+LAN_NETWORKS = tuple(ipaddress.ip_network(network) for network in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"))
 
 
 def config_path(key_path):
@@ -47,8 +50,15 @@ def endpoint(base_url):
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("服务地址需要完整 HTTP(S) 地址，不能包含密钥、账号、查询参数或片段。")
-    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
-        raise ValueError("远程服务地址请使用 HTTPS；HTTP 仅用于本机服务。")
+    if parsed.scheme == "http":
+        allowed = parsed.hostname == "localhost"
+        try:
+            address = ipaddress.ip_address(parsed.hostname)
+            allowed = address.is_loopback or any(address in network for network in LAN_NETWORKS)
+        except ValueError:
+            pass
+        if not allowed:
+            raise ValueError("公网服务地址请使用 HTTPS；HTTP 支持本机及局域网 IP 地址。")
     return url if parsed.path.endswith("/chat/completions") else url + "/chat/completions"
 
 

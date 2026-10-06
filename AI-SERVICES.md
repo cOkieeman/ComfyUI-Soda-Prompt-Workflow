@@ -21,7 +21,7 @@
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | 使用 Google 的 OpenAI 兼容接口，填写可用 Gemini 型号 |
 | 自定义 | 自行填写 | 服务必须支持 Chat Completions；反推还需支持 `image_url` 内联图片 |
 
-也可直接填写完整 `/chat/completions` 地址，不会重复追加路径。远程地址使用 HTTPS，本机兼容服务支持 HTTP。
+也可直接填写完整 `/chat/completions` 地址，不会重复追加路径。公网地址使用 HTTPS；本机和局域网 IP 地址支持 HTTP，包括 `10.*`、`172.16.*` 至 `172.31.*`、`192.168.*` 和 IPv6 ULA。服务在另一台电脑上时，填写那台电脑的 IP 和 API 路径，例如 `http://192.168.1.5:8045/v1`；`127.0.0.1` 指向运行 ComfyUI 的本机。
 
 地址依据：[DeepSeek 官方示例](https://api-docs.deepseek.com/api_samples/chat_curl/)、[智谱官方 SDK](https://github.com/zai-org/z-ai-sdk-python/blob/main/README_CN.md)、[Gemini 官方兼容接口](https://ai.google.dev/gemini-api/docs/openai)。此入口处理文字生成和图片理解，不调用图像生成接口；不支持原生 Anthropic Messages 或 Gemini generateContent 地址。
 

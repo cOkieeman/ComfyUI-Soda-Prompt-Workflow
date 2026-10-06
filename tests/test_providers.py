@@ -65,6 +65,22 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, '支持图片输入'):
             providers.resolve(self.key_path, True)
 
+    def test_lan_http_addresses_support_model_discovery_and_chat_endpoints(self):
+        for host in ('192.168.1.5', '10.2.3.4', '172.16.0.1', '172.31.255.254', '[fd12::5]', '127.0.0.2'):
+            url = f'http://{host}:8045/v1'
+            self.assertEqual(providers.endpoint(url), url + '/chat/completions')
+        service, key = providers.draft_service(self.key_path, {'service': 'custom', 'profile': {
+            'base_url': 'http://192.168.1.5:8045/v1', 'api_key': 'fake-lan-test-key'}})
+        self.assertEqual(service['endpoint'], 'http://192.168.1.5:8045/v1/chat/completions')
+        self.assertEqual(key, 'fake-lan-test-key')
+        self.assertFalse(providers.config_path(self.key_path).exists())
+
+    def test_http_public_reserved_and_hostnames_remain_rejected(self):
+        for host in ('8.8.8.8', '172.15.255.255', '172.32.0.1', '192.169.1.5', '169.254.169.254',
+                     '100.64.0.1', '198.51.100.5', 'remote.example.com', '[2001:4860:4860::8888]'):
+            with self.assertRaisesRegex(ValueError, 'HTTPS'):
+                providers.endpoint(f'http://{host}:8045/v1')
+
     async def test_provider_endpoint_and_models_partition_cache_without_keys(self):
         self.configure()
         directory = Path(self.temp.name) / 'cache'
