@@ -1,7 +1,11 @@
 """Local AI service profiles; credentials never enter workflows or API responses."""
 import hashlib
+import asyncio
+import base64
+import io
 import json
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -59,6 +63,32 @@ def public_config(key_path):
     return data
 
 
+def updated_profile(profile, update):
+    if not isinstance(update, dict):
+        raise ValueError("AI 服务配置格式错误。")
+    profile = dict(profile)
+    old_url = profile["base_url"].rstrip("/")
+    for field in ("base_url", "text_model", "vision_model"):
+        item = update.get(field, profile[field])
+        if not isinstance(item, str) or len(item) > 1000 or "\n" in item or "\r" in item:
+            raise ValueError("服务地址和模型名称必须是单行文本。")
+        profile[field] = item.strip()
+    if profile["base_url"]:
+        endpoint(profile["base_url"])
+    strict = update.get("strict_model", profile["strict_model"])
+    if not isinstance(strict, bool):
+        raise ValueError("模型严格校验开关格式错误。")
+    profile["strict_model"] = strict
+    key = update.get("api_key", "")
+    if not isinstance(key, str) or len(key) > 8192 or "\n" in key or "\r" in key:
+        raise ValueError("API Key 必须是单行文本。")
+    if key.strip():
+        profile["api_key"] = key.strip()
+    elif profile["base_url"].rstrip("/") != old_url:
+        profile.pop("api_key", None)
+    return profile
+
+
 def save(key_path, value):
     if not isinstance(value, dict) or value.get("active") not in PRESETS or not isinstance(value.get("profiles"), dict):
         raise ValueError("AI 服务配置格式错误。")
@@ -66,26 +96,7 @@ def save(key_path, value):
     for name, update in value["profiles"].items():
         if name not in PRESETS or not isinstance(update, dict):
             raise ValueError("未知 AI 服务配置。")
-        profile = data["profiles"][name]
-        old_url = profile["base_url"].rstrip("/")
-        for field in ("base_url", "text_model", "vision_model"):
-            item = update.get(field, profile[field])
-            if not isinstance(item, str) or len(item) > 1000 or "\n" in item or "\r" in item:
-                raise ValueError("服务地址和模型名称必须是单行文本。")
-            profile[field] = item.strip()
-        if profile["base_url"]:
-            endpoint(profile["base_url"])
-        strict = update.get("strict_model", profile["strict_model"])
-        if not isinstance(strict, bool):
-            raise ValueError("模型严格校验开关格式错误。")
-        profile["strict_model"] = strict
-        key = update.get("api_key", "")
-        if not isinstance(key, str) or len(key) > 8192 or "\n" in key or "\r" in key:
-            raise ValueError("API Key 必须是单行文本。")
-        if key.strip():
-            profile["api_key"] = key.strip()
-        elif profile["base_url"].rstrip("/") != old_url:
-            profile.pop("api_key", None)
+        data["profiles"][name] = updated_profile(data["profiles"][name], update)
     data["active"] = value["active"]
     active = data["profiles"][data["active"]]
     endpoint(active["base_url"])
@@ -148,6 +159,90 @@ def changed(cls, **kwargs):
     return fingerprint(key_path())
 
 
+def draft_service(key_path, value, model_type=None):
+    """Resolve unsaved form values without activating or persisting them."""
+    from . import core
+    if not isinstance(value, dict) or not isinstance(value.get("service"), str) or value["service"] not in PRESETS:
+        raise ValueError("请选择有效的 AI 服务。")
+    name = value["service"]
+    profile = updated_profile(load(key_path)["profiles"][name], value.get("profile"))
+    url = endpoint(profile["base_url"])
+    model = ""
+    if model_type is not None:
+        if model_type not in ("text", "vision"):
+            raise ValueError("请选择文字或看图测试。")
+        model = profile[model_type + "_model"]
+        if not model:
+            raise ValueError("请填写看图模型。" if model_type == "vision" else "请填写文字模型。")
+    key = profile.get("api_key", "").strip()
+    if not key and name == "deepseek" and url == core.ENDPOINT:
+        key = core.read_key(key_path)
+    if not key:
+        raise ValueError("请填写 API Key；更换服务地址后需要重新填写。")
+    return {"id": name, "name": profile["name"], "endpoint": url,
+        "model": model, "strict_model": profile["strict_model"]}, key
+
+
+async def fetch_models(key_path, value):
+    import aiohttp
+    service, key = draft_service(key_path, value)
+    url = service["endpoint"][:-len("/chat/completions")] + "/models"
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+            async with session.get(url, headers={"Authorization": f"Bearer {key}"}, allow_redirects=False) as response:
+                if response.status != 200:
+                    hints = {401: "密钥无效。", 403: "没有读取模型列表的权限。",
+                        404: "此服务未提供 /models 接口，请手动填写模型名称。",
+                        405: "此服务未提供 /models 接口，请手动填写模型名称。", 429: "接口限流，请稍后重试。"}
+                    raise RuntimeError(f"拉取模型失败（HTTP {response.status}）："
+                        + hints.get(response.status, "请检查服务地址或服务状态；仍可手动填写模型。"))
+                data = await response.json(content_type=None)
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        raise RuntimeError("拉取模型网络失败或超时，请检查服务地址和网络。") from None
+    except (ValueError, UnicodeDecodeError):
+        raise RuntimeError("模型列表响应不是有效 JSON，请手动填写模型。") from None
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        raise RuntimeError("模型列表不是 OpenAI 兼容格式，请手动填写模型。")
+    models = sorted({item["id"].strip() for item in data["data"]
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+        and 0 < len(item["id"].strip()) <= 1000 and "\n" not in item["id"] and "\r" not in item["id"]
+        and key not in item["id"]})
+    if not models:
+        raise RuntimeError("服务未返回可用模型，请检查账户权限或手动填写模型。")
+    return {"models": models}
+
+
+async def test_service(key_path, value):
+    from . import core
+    from PIL import Image
+    model_type = value.get("model_type") if isinstance(value, dict) else None
+    if model_type not in ("text", "vision"):
+        raise ValueError("请选择文字或看图测试。")
+    service, key = draft_service(key_path, value, model_type)
+    content = "Reply with OK only."
+    if model_type == "vision":
+        buffer = io.BytesIO()
+        Image.new("RGB", (32, 32), "white").save(buffer, format="PNG")
+        image_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+        content = [{"type": "text", "text": "What is the main color of this image? Reply briefly."},
+            {"type": "image_url", "image_url": {"url": image_url}}]
+    started = time.monotonic()
+    try:
+        _, meta = await core.chat_text(key, [{"role": "user", "content": content}], 30, 64, service=service)
+    except RuntimeError as error:
+        # Never forward upstream response bodies or credentials to the browser.
+        raise RuntimeError(str(error).replace(key, "[已隐藏]")) from None
+    response_model = meta.get("response_model")
+    if not isinstance(response_model, str) or key in response_model:
+        response_model = ""
+    mismatch = response_model != service["model"]
+    if mismatch and service["strict_model"]:
+        raise RuntimeError("测试失败：服务返回的模型名称与请求不一致；请检查模型名称或关闭严格核对。")
+    return {"ok": True, "model_type": model_type, "response_model": response_model,
+        "elapsed_ms": round((time.monotonic() - started) * 1000),
+        "warning": "服务返回模型别名或未提供模型标识。" if mismatch else ""}
+
+
 def register_routes():
     from aiohttp import web
     from server import PromptServer
@@ -169,3 +264,23 @@ def register_routes():
             return web.json_response(save(key_path(), await request.json()), headers={"Cache-Control": "no-store"})
         except (ValueError, RuntimeError, TypeError):
             return web.json_response({"error": "保存失败，请检查服务地址、模型和密钥格式。配置未修改。"}, status=400)
+
+    async def probe(request, operation):
+        origin = request.headers.get("Origin")
+        if request.headers.get("Sec-Fetch-Site") == "cross-site" or (origin and urlsplit(origin).netloc != request.host):
+            return web.json_response({"error": "请从当前 ComfyUI 页面拉取模型或测试。"}, status=403)
+        headers = {"Cache-Control": "no-store"}
+        try:
+            return web.json_response(await operation(key_path(), await request.json()), headers=headers)
+        except (ValueError, RuntimeError) as error:
+            return web.json_response({"error": str(error)}, status=400, headers=headers)
+        except (TypeError, KeyError):
+            return web.json_response({"error": "请求或服务响应格式错误，请检查配置。"}, status=400, headers=headers)
+
+    @PromptServer.instance.routes.post("/soda/ai-services/models")
+    async def get_models(request):
+        return await probe(request, fetch_models)
+
+    @PromptServer.instance.routes.post("/soda/ai-services/test")
+    async def check_service(request):
+        return await probe(request, test_service)
