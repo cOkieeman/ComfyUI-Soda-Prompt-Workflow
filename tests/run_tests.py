@@ -7,7 +7,7 @@ suite = unittest.defaultTestLoader.loadTestsFromNames([
     'test_workflow', 'test_suite', 'test_pixel', 'test_prompt_output',
     'test_materials', 'test_unified', 'test_rectification', 'test_tipo', 'test_tipo_process', 'test_anima_slots', 'test_target_prompt', 'test_providers',
     'test_tag_tools',
-    'test_local_vlm',
+    'test_local_vlm', 'test_service_probes',
 ])
 result = unittest.TextTestRunner(verbosity=2).run(suite)
 raise SystemExit(not result.wasSuccessful())
